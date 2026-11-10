@@ -186,6 +186,32 @@ export function makeFactPanel(sku: Sku, lang: Lang): PanelImage {
   return fit(fieldRuns(sku, lang), 720, 1280)
 }
 
+function composeScreen(runs: readonly Run[], ground: string): PanelImage {
+  const width = 1280
+  const height = 720
+  let scale = 1
+  let canvas = paint(runs, scale, width, ground)
+  let guard = 0
+  while (canvas.height > height && guard < 6) {
+    scale *= height / canvas.height
+    canvas = paint(runs, scale, width, ground)
+    guard += 1
+  }
+  const out = document.createElement('canvas')
+  out.width = width
+  out.height = height
+  const ctx = out.getContext('2d')
+  if (!ctx) throw new Error('canvas')
+  ctx.fillStyle = ground
+  ctx.fillRect(0, 0, width, height)
+  const drawH = Math.min(canvas.height, height)
+  const drawW = Math.round(canvas.width * (drawH / canvas.height))
+  const x = Math.round((width - drawW) / 2)
+  const y = Math.round((height - drawH) / 2)
+  ctx.drawImage(canvas, x, y, drawW, drawH)
+  return toTexture(out)
+}
+
 export function makeScreenPanel(mode: 'welcome' | 'close' | Sku, lang: Lang): PanelImage {
   const runs: Run[] = []
   if (mode === 'welcome') {
@@ -198,7 +224,7 @@ export function makeScreenPanel(mode: 'welcome' | 'close' | Sku, lang: Lang): Pa
   }
   runs.push({ text: DISCLAIMER.zh, size: 16, weight: 400, color: MUTED, gap: 4 })
   runs.push({ text: DISCLAIMER.en, size: 14, weight: 400, color: QUIET, gap: 0 })
-  return fit(runs, 720, mode === 'welcome' || mode === 'close' ? 900 : 1500, SCREEN)
+  return composeScreen(runs, SCREEN)
 }
 
 export function makeSizeNote(zh: string | undefined, en: string | undefined): PanelImage {
