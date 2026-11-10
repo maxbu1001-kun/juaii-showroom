@@ -1,10 +1,18 @@
 import { CameraControls } from '@react-three/drei'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import CameraControlsImpl from 'camera-controls'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { DoubleSide, MeshStandardMaterial, NeutralToneMapping, Vector3 } from 'three'
-import type { Group, WebGLRenderer } from 'three'
+import type { RefObject } from 'react'
+import {
+  Box3,
+  DoubleSide,
+  LinearToneMapping,
+  MeshPhysicalMaterial,
+  MeshStandardMaterial,
+  Vector3,
+} from 'three'
+import type { DirectionalLight, Group, Mesh, Object3D, WebGLRenderer } from 'three'
 import { PARTS } from '../copy'
 import type { Lang, Pair, PartId, Sku, Zone } from '../copy'
 import {
@@ -35,10 +43,37 @@ export type ShowroomProps = {
   onRimOrbitDone: () => void
 }
 
-const J03 = { x: 1.75, z: 2.4 }
-const J02 = { x: 4.35, z: 2.4 }
-const GUIDE = { x: 3.05, z: 3.55 }
+/** Human-scale room. 1 unit = 1 meter. Inner faces meet at x0/z0; the front plane is open. */
+const ROOM = {
+  x0: 0,
+  x1: 6.4,
+  z0: 0,
+  z1: 5.6,
+  h: 2.62,
+  t: 0.22,
+  skirtH: 0.09,
+  skirtD: 0.02,
+}
+
+const PLINTH_H = 0.08
+const PLINTH_S = 0.46
+const J03 = { x: 1.92, z: 2.18 }
+const J02 = { x: 4.48, z: 2.18 }
+const GUIDE = { x: 3.2, z: 2.85 }
+const POST_H = 0.62
+const SCREEN_W = 1.68
+const SCREEN_H = (1.68 * 9) / 16
+const SCREEN_D = 0.05
 const POSE_X = [-0.36, -0.74, -1.12] as const
+
+const CAM_BOX = {
+  minX: 0.22,
+  maxX: ROOM.x1 - 0.22,
+  minY: 0.18,
+  maxY: ROOM.h - 0.2,
+  minZ: 0.26,
+  maxZ: ROOM.z1 - 0.28,
+}
 
 type Goal = { pos: [number, number, number]; target: [number, number, number] }
 
@@ -46,72 +81,120 @@ const _lerpP = new Vector3()
 const _lerpT = new Vector3()
 const _sep = new Vector3()
 const _goalSep = new Vector3()
+const _ndc = new Vector3()
+const _ray = new Vector3()
+const flightGate = { active: false }
 
-const BACK_WALL = { min: [-0.7, 0, -0.1] as const, max: [7, 3.25, 0.02] as const }
-const SIDE_WALL = { min: [-0.1, 0, -0.6] as const, max: [0.02, 3.25, 6.3] as const }
-
-function segmentHitsBox(
-  ax: number,
-  ay: number,
-  az: number,
-  bx: number,
-  by: number,
-  bz: number,
-  min: readonly [number, number, number],
-  max: readonly [number, number, number],
-): boolean {
-  const origin = [ax, ay, az]
-  const delta = [bx - ax, by - ay, bz - az]
-  let t0 = 0
-  let t1 = 1
-  for (let axis = 0; axis < 3; axis += 1) {
-    if (Math.abs(delta[axis]) < 1e-8) {
-      if (origin[axis] < min[axis] || origin[axis] > max[axis]) return false
-      continue
-    }
-    let near = (min[axis] - origin[axis]) / delta[axis]
-    let far = (max[axis] - origin[axis]) / delta[axis]
-    if (near > far) {
-      const swap = near
-      near = far
-      far = swap
-    }
-    t0 = Math.max(t0, near)
-    t1 = Math.min(t1, far)
-    if (t0 > t1) return false
-  }
-  return true
-}
-
-function crossesRoomWall(from: Vector3, to: Vector3): boolean {
-  return (
-    segmentHitsBox(from.x, from.y, from.z, to.x, to.y, to.z, BACK_WALL.min, BACK_WALL.max) ||
-    segmentHitsBox(from.x, from.y, from.z, to.x, to.y, to.z, SIDE_WALL.min, SIDE_WALL.max)
-  )
+function clampInto(p: Vector3): void {
+  p.x = Math.min(CAM_BOX.maxX, Math.max(CAM_BOX.minX, p.x))
+  p.y = Math.min(CAM_BOX.maxY, Math.max(CAM_BOX.minY, p.y))
+  p.z = Math.min(CAM_BOX.maxZ, Math.max(CAM_BOX.minZ, p.z))
 }
 
 function cameraGoal(zone: Zone, sku: Sku | null): Goal {
   if (zone === 'closeup') {
     if (sku === 'J02-01') {
-      return { pos: [5.02, 0.96, 3.02], target: [4.35, 0.6, 2.34] }
+      return { pos: [4.55, 0.55, 2.9], target: [4.48, 0.4, 2.15] }
     }
-    return { pos: [1.75, 0.98, 2.72], target: [1.75, 0.42, 2.4] }
+    return { pos: [1.92, 0.28, 2.64], target: [1.92, 0.18, 2.12] }
   }
   switch (zone) {
     case 'j03':
-      return { pos: [1.95, 1.2, 3.28], target: [1.75, 0.46, 2.4] }
+      return { pos: [2.45, 1.08, 3.25], target: [1.9, 0.55, 1.2] }
     case 'j02':
-      return { pos: [5.15, 1.16, 3.48], target: [4.35, 0.66, 2.4] }
+      return { pos: [3.45, 1.08, 3.3], target: [4.55, 0.5, 1.15] }
     case 'wall':
-      // Holds both fact cards even after the detail sheet narrows the view.
-      return { pos: [3.05, 1.92, 6.05], target: [3.05, 1.42, 0.02] }
+      return { pos: [3.2, 1.5, 4.48], target: [3.2, 1.32, 0.12] }
     case 'guide':
-      return { pos: [3.05, 1.28, 4.7], target: [GUIDE.x, 0.72, GUIDE.z] }
+      return { pos: [3.2, 1.57, 4.95], target: [3.2, 1.48, 0.7] }
     case 'screen':
-      return { pos: [3.62, 1.7, 3.55], target: [0.08, 1.38, 3.55] }
+      return { pos: [2.55, 1.42, 3.05], target: [0.12, 1.28, 1.62] }
     default:
-      return { pos: [6.15, 2.28, 6.35], target: [2.35, 1.12, 2.15] }
+      return { pos: [4.7, 1.5, 5.1], target: [3.4, 1.0, 1.05] }
   }
+}
+
+function rayLeavesThroughOpening(origin: Vector3, dir: Vector3): boolean {
+  const { x0, x1, z0, z1, h } = ROOM
+  if (dir.z <= 1e-5) return false
+  const tOpen = (z1 - origin.z) / dir.z
+  if (tOpen <= 0.02) return false
+  const x = origin.x + dir.x * tOpen
+  const y = origin.y + dir.y * tOpen
+  const inAperture = x > x0 + 0.04 && x < x1 - 0.04 && y > 0.06 && y < h - 0.06
+  if (!inAperture) return false
+  if (dir.y < -1e-5) {
+    const t = -origin.y / dir.y
+    if (t > 0 && t < tOpen) {
+      const hx = origin.x + dir.x * t
+      const hz = origin.z + dir.z * t
+      if (hx >= x0 && hx <= x1 && hz >= z0 && hz <= z1) return false
+    }
+  }
+  if (dir.y > 1e-5) {
+    const t = (h - origin.y) / dir.y
+    if (t > 0 && t < tOpen) {
+      const hx = origin.x + dir.x * t
+      const hz = origin.z + dir.z * t
+      if (hx >= x0 && hx <= x1 && hz >= z0 && hz <= z1) return false
+    }
+  }
+  if (dir.x < -1e-5) {
+    const t = (x0 - origin.x) / dir.x
+    if (t > 0 && t < tOpen) {
+      const hy = origin.y + dir.y * t
+      const hz = origin.z + dir.z * t
+      if (hy >= 0 && hy <= h && hz >= z0 && hz <= z1) return false
+    }
+  }
+  if (dir.x > 1e-5) {
+    const t = (x1 - origin.x) / dir.x
+    if (t > 0 && t < tOpen) {
+      const hy = origin.y + dir.y * t
+      const hz = origin.z + dir.z * t
+      if (hy >= 0 && hy <= h && hz >= z0 && hz <= z1) return false
+    }
+  }
+  if (dir.z < -1e-5) {
+    const t = (z0 - origin.z) / dir.z
+    if (t > 0 && t < tOpen) {
+      const hx = origin.x + dir.x * t
+      const hy = origin.y + dir.y * t
+      if (hx >= x0 && hx <= x1 && hy >= 0 && hy <= h) return false
+    }
+  }
+  return true
+}
+
+function poseLeavesRoom(camera: { position: Vector3; updateMatrixWorld: () => void; projectionMatrix: unknown }): boolean {
+  const origin = camera.position
+  if (
+    origin.x < CAM_BOX.minX - 0.02 ||
+    origin.x > CAM_BOX.maxX + 0.02 ||
+    origin.y < CAM_BOX.minY - 0.02 ||
+    origin.y > CAM_BOX.maxY + 0.02 ||
+    origin.z < CAM_BOX.minZ - 0.02 ||
+    origin.z > CAM_BOX.maxZ + 0.02
+  ) {
+    return true
+  }
+  camera.updateMatrixWorld()
+  const corners: Array<[number, number]> = [
+    [0, 0],
+    [-0.96, -0.96],
+    [0.96, -0.96],
+    [-0.96, 0.96],
+    [0.96, 0.96],
+  ]
+  for (const [x, y] of corners) {
+    _ndc.set(x, y, 0.5)
+    _ndc.unproject(camera as never)
+    _ray.copy(_ndc).sub(origin)
+    if (_ray.lengthSq() < 1e-8) continue
+    _ray.normalize()
+    if (rayLeavesThroughOpening(origin, _ray)) return true
+  }
+  return false
 }
 
 function useFontEpoch(): number {
@@ -138,42 +221,67 @@ type Flight = {
   fromT: Vector3
   toP: Vector3
   toT: Vector3
-  lift: number
   t: number
 }
 
-function CameraRig({ cameraKey, onReady }: { cameraKey: string; onReady: () => void }) {
-  const ref = useRef<CameraControlsImpl>(null)
+function CameraRig({
+  cameraKey,
+  onReady,
+  controlsRef,
+}: {
+  cameraKey: string
+  onReady: () => void
+  controlsRef: RefObject<CameraControlsImpl | null>
+}) {
   const readyOnce = useRef(false)
   const seen = useRef<string | null>(null)
   const flight = useRef<Flight | null>(null)
+  const scene = useThree((state) => state.scene)
 
   useEffect(() => {
-    const controls = ref.current
+    const controls = controlsRef.current
     if (!controls) return
     const cancelFlight = () => {
       flight.current = null
+      flightGate.active = false
     }
     controls.addEventListener('controlstart', cancelFlight)
     return () => controls.removeEventListener('controlstart', cancelFlight)
-  }, [])
+  }, [controlsRef])
 
   useEffect(() => {
-    const controls = ref.current
+    const controls = controlsRef.current
     if (!controls) return
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    // Wall and screen frames sit just under the horizon. The old cap
-    // (π/2 − 0.045) made those poses illegal, so the next orbit yanked them.
-    controls.minPolarAngle = 0.28
+    // Canonical poses stay inside these stops, so a later orbit cannot pull them off.
+    controls.minPolarAngle = 0.42
     controls.maxPolarAngle = Math.PI / 2 - 0.008
-    controls.minDistance = 0.18
-    controls.maxDistance = 9
+    controls.minAzimuthAngle = -1.25
+    controls.maxAzimuthAngle = 1.45
+    controls.minDistance = 0.34
+    controls.maxDistance = 5.5
     controls.smoothTime = reduce ? 0 : 0.45
     controls.draggingSmoothTime = 0.1
     controls.dollySpeed = 0.38
     controls.azimuthRotateSpeed = 0.72
     controls.polarRotateSpeed = 0.52
     controls.infinityDolly = false
+    controls.boundaryEnclosesCamera = true
+    controls.setBoundary(
+      new Box3(
+        new Vector3(0.05, 0.06, 0.05),
+        new Vector3(ROOM.x1 - 0.1, ROOM.h - 0.16, ROOM.z1 - 0.22),
+      ),
+    )
+    const shell = scene.getObjectByName('room-shell')
+    if (shell) {
+      const meshes: Mesh[] = []
+      shell.traverse((obj) => {
+        const mesh = obj as Mesh
+        if (mesh.isMesh) meshes.push(mesh)
+      })
+      controls.colliderMeshes = meshes
+    }
     const action = CameraControlsImpl.ACTION
     controls.mouseButtons.left = action.ROTATE
     controls.mouseButtons.right = action.DOLLY
@@ -192,38 +300,32 @@ function CameraRig({ cameraKey, onReady }: { cameraKey: string; onReady: () => v
     const toT = new Vector3(goal.target[0], goal.target[1], goal.target[2])
     if (first || reduce) {
       flight.current = null
+      flightGate.active = false
       void controls.setLookAt(toP.x, toP.y, toP.z, toT.x, toT.y, toT.z, false)
     } else {
       const fromP = new Vector3()
       const fromT = new Vector3()
       controls.getPosition(fromP, false)
       controls.getTarget(fromT, false)
-      flight.current = {
-        fromP,
-        fromT,
-        toP,
-        toT,
-        lift: crossesRoomWall(fromP, toP) ? 1.7 : 0,
-        t: 0,
-      }
+      flight.current = { fromP, fromT, toP, toT, t: 0 }
+      flightGate.active = true
     }
     if (!readyOnce.current) {
       readyOnce.current = true
       requestAnimationFrame(() => onReady())
     }
-  }, [cameraKey, onReady])
+  }, [cameraKey, onReady, controlsRef, scene])
 
   useFrame((_, delta) => {
-    const controls = ref.current
+    const controls = controlsRef.current
     const fly = flight.current
+    flightGate.active = fly !== null
     if (!controls || !fly) return
     fly.t = Math.min(1, fly.t + delta / 0.58)
     const k = fly.t >= 1 ? 1 : 1 - (1 - fly.t) ** 3
     _lerpP.copy(fly.fromP).lerp(fly.toP, k)
     _lerpT.copy(fly.fromT).lerp(fly.toT, k)
-    if (fly.lift > 0 && k > 0 && k < 1) {
-      _lerpP.y += Math.sin(Math.PI * k) * fly.lift
-    }
+    clampInto(_lerpP)
     _sep.subVectors(_lerpP, _lerpT)
     if (_sep.length() < 0.42) {
       _goalSep.subVectors(fly.toP, fly.toT)
@@ -232,15 +334,52 @@ function CameraRig({ cameraKey, onReady }: { cameraKey: string; onReady: () => v
       }
       if (_sep.lengthSq() < 1e-6) _sep.set(0, 0.2, 1)
       _lerpP.copy(_lerpT).addScaledVector(_sep.normalize(), 0.42)
+      clampInto(_lerpP)
     }
-    void controls.setLookAt(_lerpP.x, _lerpP.y, _lerpP.z, _lerpT.x, _lerpT.y, _lerpT.z, false)
-    if (fly.t >= 1) {
-      void controls.setLookAt(fly.toP.x, fly.toP.y, fly.toP.z, fly.toT.x, fly.toT.y, fly.toT.z, false)
+    const done = fly.t >= 1
+    const p = done ? fly.toP : _lerpP
+    const t = done ? fly.toT : _lerpT
+    void controls.setLookAt(p.x, p.y, p.z, t.x, t.y, t.z, false)
+    if (done) {
       flight.current = null
+      flightGate.active = false
     }
   })
 
-  return <CameraControls ref={ref} makeDefault dollyToCursor={false} />
+  return <CameraControls ref={controlsRef} makeDefault dollyToCursor={false} />
+}
+
+function Confine({
+  controlsRef,
+}: {
+  controlsRef: RefObject<CameraControlsImpl | null>
+}) {
+  const lastGood = useRef<{ p: Vector3; t: Vector3 } | null>(null)
+  const scratchP = useMemo(() => new Vector3(), [])
+  const scratchT = useMemo(() => new Vector3(), [])
+
+  useFrame(() => {
+    const controls = controlsRef.current
+    if (!controls || flightGate.active) return
+    const camera = controls.camera
+    if (!camera || !('isPerspectiveCamera' in camera) || !camera.isPerspectiveCamera) return
+    controls.update(0)
+    if (!poseLeavesRoom(camera)) {
+      if (!lastGood.current) lastGood.current = { p: new Vector3(), t: new Vector3() }
+      lastGood.current.p.copy(camera.position)
+      controls.getTarget(scratchT, false)
+      lastGood.current.t.copy(scratchT)
+      return
+    }
+    const good = lastGood.current
+    if (!good) return
+    scratchP.copy(good.p)
+    scratchT.copy(good.t)
+    void controls.setLookAt(scratchP.x, scratchP.y, scratchP.z, scratchT.x, scratchT.y, scratchT.z, false)
+    controls.update(0)
+  })
+
+  return null
 }
 
 function pickHandlers(onActivate: () => void) {
@@ -423,11 +562,13 @@ function Tray({
   const map = useMemo(() => getBrushedMap(), [])
   const trayMat = useMemo(
     () =>
-      new MeshStandardMaterial({
+      new MeshPhysicalMaterial({
         map,
         color: '#d5d9dd',
-        metalness: 0.16,
-        roughness: 0.48,
+        metalness: 0.48,
+        roughness: 0.34,
+        anisotropy: 0.85,
+        anisotropyRotation: Math.PI / 2,
         side: DoubleSide,
       }),
     [map],
@@ -485,7 +626,6 @@ function Tray({
           <mesh
             position={[0, 0.013, 0]}
             material={trayMat}
-            castShadow
             {...(closeup ? pickHandlers(() => onPickPart('j03-brushed')) : {})}
           >
             <cylinderGeometry args={[0.0625, 0.0625, 0.026, 48, 1, true]} />
@@ -612,8 +752,8 @@ function Stand({
     else tilt.current += (goal - tilt.current) * (1 - Math.exp(-3.4 * delta))
     if (pivot.current) pivot.current.rotation.x = tilt.current
   })
-  const metal = { color: '#c8c2b8', metalness: 0.16, roughness: 0.5 }
-  const pole = { color: '#b7b1a6', metalness: 0.2, roughness: 0.42 }
+  const metal = { color: '#c8c2b8', metalness: 0.42, roughness: 0.34 }
+  const pole = { color: '#b7b1a6', metalness: 0.46, roughness: 0.3 }
   const clampEmissive = clampNotes ? '#5e5a55' : '#000000'
   const clampIntensity = clampNotes ? 0.28 : 0
 
@@ -627,7 +767,6 @@ function Stand({
     >
       <mesh
         position={[0, 0.008, 0.012]}
-        castShadow
         {...(closeup ? pickHandlers(() => onPickPart('j02-size')) : {})}
       >
         <boxGeometry args={[0.2, 0.014, 0.12]} />
@@ -637,7 +776,6 @@ function Stand({
         <group key={x}>
           <mesh
             position={[x, 0.125, 0]}
-            castShadow
             {...(closeup ? pickHandlers(() => onPickPart('j02-poles')) : {})}
           >
             <cylinderGeometry args={[0.007, 0.007, 0.23, 14]} />
@@ -645,49 +783,46 @@ function Stand({
           </mesh>
           <mesh position={[x, 0.16, 0]} rotation={[Math.PI / 2, 0, 0]}>
             <torusGeometry args={[0.012, 0.0026, 8, 18]} />
-            <meshStandardMaterial color="#9a948c" metalness={0.16} roughness={0.45} />
+            <meshStandardMaterial color="#9a948c" metalness={0.4} roughness={0.34} />
           </mesh>
         </group>
       ))}
       <group position={[0, 0.245, 0.028]}>
         <mesh
           rotation={[0, 0, Math.PI / 2]}
-          castShadow
           {...(closeup ? pickHandlers(() => onPickPart('j02-hinge')) : {})}
         >
           <cylinderGeometry args={[0.012, 0.012, 0.22, 16]} />
-          <meshStandardMaterial color="#8f8a83" metalness={0.22} roughness={0.38} />
+          <meshStandardMaterial color="#8f8a83" metalness={0.48} roughness={0.28} />
         </mesh>
         <group ref={pivot}>
           <mesh
             position={[0, -0.09, 0]}
-            castShadow
             {...(closeup ? pickHandlers(() => onPickPart('j02-hinge')) : {})}
           >
             <boxGeometry args={[0.11, 0.18, 0.006]} />
-            <meshStandardMaterial color="#d2ccc3" metalness={0.14} roughness={0.48} />
+            <meshStandardMaterial color="#d2ccc3" metalness={0.36} roughness={0.36} />
           </mesh>
           <group position={[0, -0.172, 0.01]}>
-            <mesh castShadow {...(closeup ? pickHandlers(() => onPickPart('j02-clamp')) : {})}>
+            <mesh {...(closeup ? pickHandlers(() => onPickPart('j02-clamp')) : {})}>
               <boxGeometry args={[0.078, 0.016, 0.01]} />
               <meshStandardMaterial
                 color="#6e6a62"
-                metalness={0.18}
-                roughness={0.42}
+                metalness={0.4}
+                roughness={0.34}
                 emissive={clampEmissive}
                 emissiveIntensity={clampIntensity}
               />
             </mesh>
             <mesh
               position={[0, 0.004, -0.01]}
-              castShadow
               {...(closeup ? pickHandlers(() => onPickPart('j02-clamp')) : {})}
             >
               <boxGeometry args={[0.078, 0.012, 0.006]} />
               <meshStandardMaterial
                 color="#5e5a55"
-                metalness={0.16}
-                roughness={0.44}
+                metalness={0.38}
+                roughness={0.34}
                 emissive={clampEmissive}
                 emissiveIntensity={clampIntensity}
               />
@@ -695,14 +830,13 @@ function Stand({
             <mesh
               position={[0, 0, 0.012]}
               rotation={[Math.PI / 2, 0, 0]}
-              castShadow
               {...(closeup ? pickHandlers(() => onPickPart('j02-clamp')) : {})}
             >
               <cylinderGeometry args={[0.009, 0.009, 0.012, 12]} />
               <meshStandardMaterial
                 color="#4e4a45"
-                metalness={0.16}
-                roughness={0.46}
+                metalness={0.38}
+                roughness={0.34}
                 emissive={clampEmissive}
                 emissiveIntensity={clampIntensity}
               />
@@ -857,47 +991,145 @@ function ScreenPanel({
       return makeScreenPanel(mode, lang)
     }, [mode, lang, epoch]),
   )
-  const w = 1.18
-  const h = Math.min(2.05, w / image.aspect)
+  const bezel = 0.03
   return (
-    <group position={[0.07, 1.38, 3.55]} rotation={[0, Math.PI / 2, 0]}>
-      <mesh position={[0, 0, -0.016]} castShadow>
-        <boxGeometry args={[w + 0.06, h + 0.06, 0.018]} />
-        <meshStandardMaterial color="#ebe6de" roughness={0.92} metalness={0} />
+    <group position={[0.01 + SCREEN_D / 2, 1.32, 1.7]} rotation={[0, Math.PI / 2, 0]}>
+      <mesh>
+        <boxGeometry args={[SCREEN_W + bezel, SCREEN_H + bezel, SCREEN_D]} />
+        <meshStandardMaterial color="#ebe6de" roughness={0.96} metalness={0} />
       </mesh>
-      <mesh position={[0, 0, 0.004]}>
-        <planeGeometry args={[w, h]} />
-        <meshBasicMaterial map={image.texture} toneMapped={false} side={DoubleSide} />
+      <mesh position={[0, 0, SCREEN_D / 2 + 0.001]}>
+        <planeGeometry args={[SCREEN_W, SCREEN_H]} />
+        <meshStandardMaterial map={image.texture} roughness={1} metalness={0} />
       </mesh>
     </group>
   )
 }
 
-function Room(props: ShowroomProps & { epoch: number }) {
-  const closeup = props.zone === 'closeup'
+function RoomShell({
+  wall,
+  floor,
+  ceil,
+}: {
+  wall: MeshStandardMaterial
+  floor: MeshStandardMaterial
+  ceil: MeshStandardMaterial
+}) {
+  const { x0, x1, z0, z1, h, t, skirtH, skirtD } = ROOM
+  const width = x1 - x0
+  const depth = z1 - z0
+  const cx = (x0 + x1) / 2
+  const cz = (z0 + z1) / 2
+  const shellW = width + t * 2
+  const sideDepth = depth + 0.02
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[3, 0, 3]} receiveShadow>
-        <planeGeometry args={[18, 18]} />
-        <meshStandardMaterial color="#d5cfc3" roughness={1} metalness={0} />
+      <mesh position={[cx, -0.025, cz]} material={floor}>
+        <boxGeometry args={[width, 0.05, depth]} />
       </mesh>
-      <mesh position={[3.15, 1.6, -0.04]} receiveShadow>
-        <boxGeometry args={[7.5, 3.2, 0.08]} />
-        <meshStandardMaterial color="#f3f1ec" roughness={1} metalness={0} />
+      <mesh position={[cx, h / 2, -t / 2]} material={wall}>
+        <boxGeometry args={[shellW, h + 0.02, t]} />
       </mesh>
-      <mesh position={[-0.04, 1.6, 2.85]} receiveShadow>
-        <boxGeometry args={[0.08, 3.2, 6.7]} />
-        <meshStandardMaterial color="#f3f1ec" roughness={1} metalness={0} />
+      <mesh position={[-t / 2, h / 2, cz - 0.01]} material={wall}>
+        <boxGeometry args={[t, h + 0.02, sideDepth]} />
       </mesh>
-      <mesh position={[J03.x, 0.2, J03.z]} castShadow receiveShadow>
-        <boxGeometry args={[0.66, 0.4, 0.66]} />
-        <meshStandardMaterial color="#ebe6de" roughness={0.96} metalness={0} />
+      <mesh position={[x1 + t / 2, h / 2, cz - 0.01]} material={wall}>
+        <boxGeometry args={[t, h + 0.02, sideDepth]} />
       </mesh>
-      <mesh position={[J02.x, 0.2, J02.z]} castShadow receiveShadow>
-        <boxGeometry args={[0.66, 0.4, 0.66]} />
-        <meshStandardMaterial color="#ebe6de" roughness={0.96} metalness={0} />
+      <mesh position={[cx, h + 0.08, (z1 - t) / 2]} material={ceil}>
+        <boxGeometry args={[shellW, 0.16, z1 + t]} />
       </mesh>
-      <group position={[J03.x, 0.4, J03.z]}>
+      <mesh position={[cx, skirtH / 2, skirtD / 2]} material={wall}>
+        <boxGeometry args={[width - skirtD * 2, skirtH, skirtD]} />
+      </mesh>
+      <mesh position={[skirtD / 2, skirtH / 2, (z1 + skirtD) / 2]} material={wall}>
+        <boxGeometry args={[skirtD, skirtH, z1 - skirtD]} />
+      </mesh>
+      <mesh position={[x1 - skirtD / 2, skirtH / 2, (z1 + skirtD) / 2]} material={wall}>
+        <boxGeometry args={[skirtD, skirtH, z1 - skirtD]} />
+      </mesh>
+    </group>
+  )
+}
+
+function RoomLights() {
+  const wash = useRef<DirectionalLight>(null)
+  const washAt = useRef<Object3D>(null)
+  const bounce = useRef<DirectionalLight>(null)
+  const bounceAt = useRef<Object3D>(null)
+  useEffect(() => {
+    if (wash.current && washAt.current) wash.current.target = washAt.current
+    if (bounce.current && bounceAt.current) bounce.current.target = bounceAt.current
+  }, [])
+  return (
+    <>
+      <hemisphereLight args={['#f7f6f3', '#e7e2da', 0.62]} />
+      <ambientLight color="#f4f2ee" intensity={0.55} />
+      <directionalLight ref={wash} color="#f6f5f2" intensity={0.95} position={[3.2, 2.05, 6.6]} />
+      <object3D ref={washAt} position={[3.2, 1.45, 0]} />
+      <directionalLight ref={bounce} color="#ebe6de" intensity={1.15} position={[3.2, 0.15, 2.7]} />
+      <object3D ref={bounceAt} position={[3.2, 2.7, 2.7]} />
+      <pointLight color="#f6f5f2" intensity={5} distance={9} decay={2} position={[2.2, 2.05, 4.9]} />
+      <pointLight color="#f6f5f2" intensity={5} distance={9} decay={2} position={[4.3, 2.05, 4.9]} />
+    </>
+  )
+}
+
+function Room(props: ShowroomProps & { epoch: number }) {
+  const closeup = props.zone === 'closeup'
+  const wall = useMemo(
+    () => new MeshStandardMaterial({ color: '#f3f1ec', roughness: 0.93, metalness: 0 }),
+    [],
+  )
+  const floor = useMemo(
+    () => new MeshStandardMaterial({ color: '#d5cfc3', roughness: 1, metalness: 0 }),
+    [],
+  )
+  const ceil = useMemo(
+    () => new MeshStandardMaterial({ color: '#f3f1ec', roughness: 1, metalness: 0, emissive: '#000000' }),
+    [],
+  )
+  const plinth = useMemo(
+    () => new MeshStandardMaterial({ color: '#ebe6de', roughness: 0.97, metalness: 0 }),
+    [],
+  )
+  const ghost = useMemo(
+    () =>
+      new MeshStandardMaterial({
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        colorWrite: false,
+        side: DoubleSide,
+      }),
+    [],
+  )
+  useEffect(
+    () => () => {
+      wall.dispose()
+      floor.dispose()
+      ceil.dispose()
+      plinth.dispose()
+      ghost.dispose()
+    },
+    [wall, floor, ceil, plinth, ghost],
+  )
+  const cx = (ROOM.x0 + ROOM.x1) / 2
+  return (
+    <group>
+      <group name="room-shell">
+        <RoomShell wall={wall} floor={floor} ceil={ceil} />
+        <mesh position={[cx, ROOM.h / 2, ROOM.z1]} material={ghost}>
+          <planeGeometry args={[ROOM.x1 - ROOM.x0, ROOM.h]} />
+        </mesh>
+      </group>
+      <mesh position={[J03.x, PLINTH_H / 2, J03.z]} material={plinth}>
+        <boxGeometry args={[PLINTH_S, PLINTH_H, PLINTH_S]} />
+      </mesh>
+      <mesh position={[J02.x, PLINTH_H / 2, J02.z]} material={plinth}>
+        <boxGeometry args={[PLINTH_S, PLINTH_H, PLINTH_S]} />
+      </mesh>
+      <group position={[J03.x, PLINTH_H, J03.z]}>
         <Tray
           selected={props.sku === 'J03-01'}
           closeup={closeup && props.sku === 'J03-01'}
@@ -911,7 +1143,7 @@ function Room(props: ShowroomProps & { epoch: number }) {
           onRimOrbitDone={props.onRimOrbitDone}
         />
       </group>
-      <group position={[J02.x, 0.4, J02.z]}>
+      <group position={[J02.x, PLINTH_H, J02.z]}>
         <Stand
           selected={props.sku === 'J02-01'}
           closeup={closeup && props.sku === 'J02-01'}
@@ -929,7 +1161,7 @@ function Room(props: ShowroomProps & { epoch: number }) {
         lang={props.lang}
         epoch={props.epoch}
         selected={props.sku === 'J03-01'}
-        position={[J03.x, 1.5, 0.02]}
+        position={[J03.x, 1.32, 0.018]}
         onOpen={() => props.onOpenSku('J03-01')}
       />
       <FactCard
@@ -937,18 +1169,17 @@ function Room(props: ShowroomProps & { epoch: number }) {
         lang={props.lang}
         epoch={props.epoch}
         selected={props.sku === 'J02-01'}
-        position={[J02.x, 1.5, 0.02]}
+        position={[J02.x, 1.32, 0.018]}
         onOpen={() => props.onOpenSku('J02-01')}
       />
       <ScreenPanel mode={props.screen} lang={props.lang} epoch={props.epoch} />
       <group position={[GUIDE.x, 0, GUIDE.z]}>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.008, 0]}>
-          <ringGeometry args={[0.1, 0.112, 48]} />
-          <meshBasicMaterial color="#6a655f" side={DoubleSide} />
+        <mesh position={[0, POST_H / 2, 0]} material={plinth}>
+          <boxGeometry args={[0.045, POST_H, 0.045]} />
         </mesh>
-        <group position={[0, 0.86, 0]}>
+        <group position={[0, POST_H + 0.03, 0]}>
           <OutlineHotspot
-            radius={0.045}
+            radius={0.04}
             selected={props.zone === 'guide'}
             onActivate={props.onGuide}
             lang={props.lang}
@@ -961,19 +1192,20 @@ function Room(props: ShowroomProps & { epoch: number }) {
 }
 
 function configureRenderer(gl: WebGLRenderer): void {
-  gl.toneMapping = NeutralToneMapping
-  gl.toneMappingExposure = 1.12
+  gl.toneMapping = LinearToneMapping
+  gl.toneMappingExposure = 1.46
 }
 
 export default function Showroom(props: ShowroomProps) {
   const epoch = useFontEpoch()
+  const controlsRef = useRef<CameraControlsImpl>(null)
   const cameraKey = `${props.zone}:${props.zone === 'closeup' ? (props.sku ?? '') : ''}:${props.frameNonce}`
   const overview = cameraGoal('overview', null)
   return (
     <Canvas
       className="webgl"
       dpr={[1, 1.25]}
-      camera={{ fov: 36, near: 0.04, far: 40, position: overview.pos }}
+      camera={{ fov: 54, near: 0.06, far: 28, position: overview.pos }}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       onCreated={({ gl, camera }) => {
         configureRenderer(gl)
@@ -982,11 +1214,10 @@ export default function Showroom(props: ShowroomProps) {
       }}
     >
       <color attach="background" args={['#e8e5e0']} />
-      <hemisphereLight args={['#f6f8fb', '#e6dfd4', 0.92]} />
-      <ambientLight color="#f7f6f3" intensity={0.62} />
-      <directionalLight color="#f4f7fb" intensity={1.25} position={[3.2, 6.4, 4.6]} />
-      <CameraRig cameraKey={cameraKey} onReady={props.onReady} />
+      <RoomLights />
+      <CameraRig cameraKey={cameraKey} onReady={props.onReady} controlsRef={controlsRef} />
       <Room {...props} epoch={epoch} />
+      <Confine controlsRef={controlsRef} />
     </Canvas>
   )
 }
