@@ -1067,7 +1067,7 @@ function RoomLights() {
       <ambientLight color="#f4f2ee" intensity={0.55} />
       <directionalLight ref={wash} color="#f6f5f2" intensity={0.95} position={[3.2, 2.05, 6.6]} />
       <object3D ref={washAt} position={[3.2, 1.45, 0]} />
-      <directionalLight ref={bounce} color="#ebe6de" intensity={1.15} position={[3.2, 0.15, 2.7]} />
+      <directionalLight ref={bounce} color="#f3f1ec" intensity={1.15} position={[3.2, 0.15, 2.7]} />
       <object3D ref={bounceAt} position={[3.2, 2.7, 2.7]} />
       <pointLight color="#f6f5f2" intensity={5} distance={9} decay={2} position={[2.2, 2.05, 4.9]} />
       <pointLight color="#f6f5f2" intensity={5} distance={9} decay={2} position={[4.3, 2.05, 4.9]} />
