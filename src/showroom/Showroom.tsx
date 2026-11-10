@@ -100,13 +100,13 @@ function cameraGoal(zone: Zone, sku: Sku | null): Goal {
   }
   switch (zone) {
     case 'j03':
-      return { pos: [2.45, 1.08, 3.25], target: [1.9, 0.55, 1.2] }
+      return { pos: [2.45, 1.08, 3.45], target: [1.92, 0.35, 1.75] }
     case 'j02':
       return { pos: [3.45, 1.08, 3.3], target: [4.55, 0.5, 1.15] }
     case 'wall':
       return { pos: [3.2, 1.5, 4.48], target: [3.2, 1.32, 0.12] }
     case 'guide':
-      return { pos: [3.2, 1.57, 4.95], target: [3.2, 1.48, 0.7] }
+      return { pos: [3.2, 1.57, 4.95], target: [3.2, 0.95, 1.2] }
     case 'screen':
       return { pos: [2.55, 1.42, 3.05], target: [0.12, 1.28, 1.62] }
     default:
@@ -1000,7 +1000,7 @@ function ScreenPanel({
       </mesh>
       <mesh position={[0, 0, SCREEN_D / 2 + 0.001]}>
         <planeGeometry args={[SCREEN_W, SCREEN_H]} />
-        <meshStandardMaterial map={image.texture} roughness={1} metalness={0} />
+        <meshBasicMaterial map={image.texture} toneMapped={false} />
       </mesh>
     </group>
   )
@@ -1057,9 +1057,12 @@ function RoomLights() {
   const washAt = useRef<Object3D>(null)
   const bounce = useRef<DirectionalLight>(null)
   const bounceAt = useRef<Object3D>(null)
+  const sideFill = useRef<DirectionalLight>(null)
+  const sideFillAt = useRef<Object3D>(null)
   useEffect(() => {
     if (wash.current && washAt.current) wash.current.target = washAt.current
     if (bounce.current && bounceAt.current) bounce.current.target = bounceAt.current
+    if (sideFill.current && sideFillAt.current) sideFill.current.target = sideFillAt.current
   }, [])
   return (
     <>
@@ -1069,6 +1072,8 @@ function RoomLights() {
       <object3D ref={washAt} position={[3.2, 1.45, 0]} />
       <directionalLight ref={bounce} color="#f3f1ec" intensity={1.15} position={[3.2, 0.15, 2.7]} />
       <object3D ref={bounceAt} position={[3.2, 2.7, 2.7]} />
+      <directionalLight ref={sideFill} color="#f3f1ec" intensity={0.9} position={[5.8, 1.45, 2.8]} />
+      <object3D ref={sideFillAt} position={[0.4, 1.45, 2.8]} />
       <pointLight color="#f6f5f2" intensity={5} distance={9} decay={2} position={[2.2, 2.05, 4.9]} />
       <pointLight color="#f6f5f2" intensity={5} distance={9} decay={2} position={[4.3, 2.05, 4.9]} />
     </>
