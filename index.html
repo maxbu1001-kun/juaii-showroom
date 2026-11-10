@@ -1,12 +1,74 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-Hans" translate="no">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>JUΛII showroom — coming soon</title>
+    <meta name="theme-color" content="#f3f1ec" />
+    <title>具和安 JUΛII</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=Noto+Sans+SC:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      html, body { margin: 0; background: #f3f1ec; }
+      #boot-poster {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        display: grid;
+        grid-template-columns: minmax(0, 38rem) minmax(12rem, 1fr);
+        gap: 1.5rem;
+        align-items: center;
+        padding: 8vh 6vw;
+        background: #f3f1ec;
+        color: #2f2d2b;
+        font-family: "IBM Plex Sans", "Noto Sans SC", sans-serif;
+        transition: opacity 0.45s linear;
+      }
+      #boot-poster.is-gone { opacity: 0; pointer-events: none; }
+      .boot-mark { margin: 0 0 0.45rem; font-size: 1.25rem; font-weight: 500; letter-spacing: 0.14em; }
+      .boot-brand { margin: 0 0 1.2rem; color: #6a655f; font-size: 0.95rem; line-height: 1.45; }
+      .boot-welcome { margin: 0 0 1.4rem; max-width: 38rem; font-size: 0.95rem; line-height: 1.55; }
+      .boot-zh, .boot-en { margin: 0; }
+      .boot-zh { font-size: 12px; line-height: 1.4; color: #6a655f; }
+      .boot-en { margin-top: 0.2rem; font-size: 11px; line-height: 1.4; color: #5e5a55; }
+      .boot-still { width: 100%; height: auto; }
+      @media (max-width: 800px) {
+        #boot-poster { grid-template-columns: 1fr; padding: 1.25rem; overflow: auto; align-items: start; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot-poster { transition: none; }
+      }
+    </style>
   </head>
   <body>
+    <div id="boot-poster">
+      <div>
+        <p class="boot-mark">具和安</p>
+        <p class="boot-brand">JUΛII—everyday objects, honestly chosen.</p>
+        <p class="boot-welcome">Welcome. This is a small showroom for JUΛII—everyday objects, honestly chosen. You can look around the room, and tap either object to hear what it is, what it is made of, and what it is for. No hard sell. Just the facts you can check.</p>
+        <p class="boot-zh">简化示意模型。非扫描件，亦不宣称与实物完全一致。</p>
+        <p class="boot-en">Simplified study model. Not a scan, and not a claim that it matches the physical object exactly.</p>
+      </div>
+      <svg class="boot-still" viewBox="0 0 640 460" aria-hidden="true">
+        <polygon points="70,340 300,250 590,340 360,430" fill="#d5cfc3" stroke="#6a655f" stroke-width="1.25"/>
+        <polygon points="70,340 300,250 300,70 70,140" fill="#f3f1ec" stroke="#6a655f" stroke-width="1.25"/>
+        <polygon points="300,250 590,340 590,160 300,70" fill="#f7f6f3" stroke="#6a655f" stroke-width="1.25"/>
+        <polygon points="118,248 188,220 188,128 118,154" fill="#e8e5e0" stroke="#6a655f"/>
+        <polygon points="198,216 274,186 274,94 198,122" fill="#e8e5e0" stroke="#6a655f"/>
+        <polygon points="392,228 492,270 492,142 392,108" fill="#e8e5e0" stroke="#5e5a55" stroke-width="2"/>
+        <polygon points="128,328 196,304 236,326 168,352" fill="#ebe6de" stroke="#6a655f"/>
+        <polygon points="128,328 168,352 168,324 128,300" fill="#e7e1d8" stroke="#6a655f"/>
+        <polygon points="352,362 438,332 488,360 402,392" fill="#ebe6de" stroke="#6a655f"/>
+        <polygon points="352,362 402,392 402,358 352,330" fill="#e7e1d8" stroke="#6a655f"/>
+        <ellipse cx="292" cy="358" rx="16" ry="7" fill="none" stroke="#6a655f" stroke-width="1.25"/>
+        <text x="136" y="346" fill="#5e5a55" font-size="13" font-family="IBM Plex Sans, sans-serif">J03-01</text>
+        <text x="392" y="404" fill="#5e5a55" font-size="13" font-family="IBM Plex Sans, sans-serif">J02-01</text>
+      </svg>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
