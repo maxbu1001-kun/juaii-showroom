@@ -1,13 +1,10 @@
 # JUΛII showroom
 
-Minimal Vite + React + TypeScript static shell.
+R2 technical spike for a corner showroom. Two study models only: J03-01 and J02-01.
 
-- Vite base=/juaii-showroom/
+- Vite `base` is `/juaii-showroom/`
 - Expected Pages URL: https://maxbu1001-kun.github.io/juaii-showroom/
-- Merge rule is PR → main (this bootstrap commit is the only allowed direct push to main).
-- This repo is independent of juaii-showroom-preview and must not overwrite that site.
-
-Reference public assets via `import.meta.env.BASE_URL`.
+- This repo is independent of juaii-showroom-preview
 
 ```bash
 npm ci
@@ -15,10 +12,8 @@ npm run dev
 npm run build
 ```
 
-Build output goes to `dist/`.
+Open the dev server on the base path (`/juaii-showroom/`). A still is painted before the 3D scene. Zone jumps, object hotspots, and close-up controls sit in the page chrome. Luke V0.2 clips live in `public/audio/`.
 
-Placeholder directories:
+Reference those files with `import.meta.env.BASE_URL`.
 
-- `public/models/` — Draco-compressed GLB
-- `public/audio/`
-- `public/textures/`
+The models are procedural study geometry, not scans. Build output goes to `dist/`.
