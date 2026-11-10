@@ -52,6 +52,7 @@ export default function App() {
   const [pose, setPose] = useState<0 | 1 | 2>(0)
   const [rimOrbit, setRimOrbit] = useState(false)
   const [ready, setReady] = useState(false)
+  const [frameNonce, setFrameNonce] = useState(0)
   const clip = useActiveClip()
   const skuRef = useRef(sku)
   const zoneRef = useRef(zone)
@@ -88,13 +89,18 @@ export default function App() {
     setRimOrbit(false)
   }, [])
 
+  const bumpFrame = useCallback(() => {
+    setFrameNonce((value) => value + 1)
+  }, [])
+
   const goZone = useCallback(
     (next: Exclude<Zone, 'closeup'>) => {
       clearStudy()
       setZone(next)
       setReturnZone(next)
+      bumpFrame()
     },
-    [clearStudy],
+    [clearStudy, bumpFrame],
   )
 
   const openCloseup = useCallback(() => {
@@ -104,12 +110,14 @@ export default function App() {
       setReturnZone(current)
     }
     setZone('closeup')
-  }, [])
+    bumpFrame()
+  }, [bumpFrame])
 
   const exitCloseup = useCallback(() => {
     clearStudy()
     setZone(returnZone)
-  }, [clearStudy, returnZone])
+    bumpFrame()
+  }, [clearStudy, returnZone, bumpFrame])
 
   const collapseFocus = useCallback(() => {
     const current = zoneRef.current
@@ -134,12 +142,27 @@ export default function App() {
 
   const openObject = useCallback(
     (id: Sku) => {
-      if (skuRef.current !== id) clearStudy()
+      const prev = skuRef.current
+      const currentZone = zoneRef.current
+      if (prev !== id) clearStudy()
       setSku(id)
+      if (prev && prev !== id) {
+        if (currentZone === 'closeup') {
+          bumpFrame()
+        } else if (currentZone === 'j03' && id === 'J02-01') {
+          setZone('j02')
+          setReturnZone('j02')
+          bumpFrame()
+        } else if (currentZone === 'j02' && id === 'J03-01') {
+          setZone('j03')
+          setReturnZone('j03')
+          bumpFrame()
+        }
+      }
       settleWelcome()
       void playClip(id).catch(() => {})
     },
-    [clearStudy],
+    [clearStudy, bumpFrame],
   )
 
   const onGuide = useCallback(() => {
@@ -181,6 +204,7 @@ export default function App() {
               onOpenSku={openObject}
               onGuide={onGuide}
               onPickPart={setPart}
+              frameNonce={frameNonce}
               onRimOrbitDone={() => setRimOrbit(false)}
             />
           </Suspense>

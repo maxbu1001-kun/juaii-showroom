@@ -18,7 +18,8 @@ type Run = {
 const INK = '#2f2d2b'
 const MUTED = '#6a655f'
 const QUIET = '#5e5a55'
-const PAPER = '#e8e5e0'
+const PAPER = '#f7f5f2'
+const SCREEN = '#f3f1ec'
 
 let brushed: CanvasTexture | null = null
 
@@ -90,7 +91,7 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): st
   return lines.length > 0 ? lines : ['']
 }
 
-function paint(runs: readonly Run[], scale: number, width: number): HTMLCanvasElement {
+function paint(runs: readonly Run[], scale: number, width: number, ground: string): HTMLCanvasElement {
   const pad = Math.round(36 * scale)
   const probe = document.createElement('canvas').getContext('2d')
   if (!probe) throw new Error('canvas')
@@ -118,7 +119,7 @@ function paint(runs: readonly Run[], scale: number, width: number): HTMLCanvasEl
   canvas.height = Math.max(height, 64)
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('canvas')
-  ctx.fillStyle = PAPER
+  ctx.fillStyle = ground
   ctx.fillRect(0, 0, canvas.width, canvas.height)
   let y = pad
   for (const line of laid) {
@@ -142,13 +143,13 @@ function toTexture(canvas: HTMLCanvasElement): PanelImage {
   return { texture, aspect: canvas.width / canvas.height }
 }
 
-function fit(runs: readonly Run[], width: number, maxHeight: number): PanelImage {
+function fit(runs: readonly Run[], width: number, maxHeight: number, ground = PAPER): PanelImage {
   let scale = 1
-  let canvas = paint(runs, scale, width)
+  let canvas = paint(runs, scale, width, ground)
   let guard = 0
   while (canvas.height > maxHeight && scale > 0.42 && guard < 4) {
     scale *= maxHeight / canvas.height
-    canvas = paint(runs, scale, width)
+    canvas = paint(runs, scale, width, ground)
     guard += 1
   }
   return toTexture(canvas)
@@ -158,18 +159,25 @@ function fieldRuns(sku: Sku, lang: Lang): Run[] {
   const runs: Run[] = []
   for (const key of FIELD_ORDER) {
     const field = CATALOG[sku][key]
-    pushPair(runs, field.label, field.value, lang)
+    if (key === 'sku_id') pushSku(runs, field.label, field.value, lang)
+    else pushPair(runs, field.label, field.value, lang)
   }
   return runs
 }
 
+function pushSku(runs: Run[], label: Pair, value: Pair, lang: Lang): void {
+  const en = lang === 'en'
+  runs.push({ text: en ? label.en : label.zh, size: 16, weight: 500, color: MUTED, gap: 2 })
+  runs.push({ text: en ? value.en : value.zh, size: en ? 20 : 22, weight: 500, color: INK, gap: 16 })
+}
+
 function pushPair(runs: Run[], label: Pair, value: Pair, lang: Lang): void {
   if (lang !== 'en') {
-    runs.push({ text: label.zh, size: 18, weight: 500, color: QUIET, gap: 4 })
+    runs.push({ text: label.zh, size: 18, weight: 500, color: MUTED, gap: 4 })
     runs.push({ text: value.zh, size: 24, weight: 500, color: INK, gap: 12 })
   }
   if (lang !== 'zh') {
-    runs.push({ text: label.en, size: 15, weight: 400, color: QUIET, gap: 4 })
+    runs.push({ text: label.en, size: 15, weight: 400, color: MUTED, gap: 4 })
     runs.push({ text: value.en, size: 18, weight: 400, color: MUTED, gap: 18 })
   }
 }
@@ -190,14 +198,14 @@ export function makeScreenPanel(mode: 'welcome' | 'close' | Sku, lang: Lang): Pa
   }
   runs.push({ text: DISCLAIMER.zh, size: 16, weight: 400, color: MUTED, gap: 4 })
   runs.push({ text: DISCLAIMER.en, size: 14, weight: 400, color: QUIET, gap: 0 })
-  return fit(runs, 720, mode === 'welcome' || mode === 'close' ? 900 : 1500)
+  return fit(runs, 720, mode === 'welcome' || mode === 'close' ? 900 : 1500, SCREEN)
 }
 
-export function makeNote(zh: string | undefined, en: string | undefined): PanelImage {
+export function makeSizeNote(zh: string | undefined, en: string | undefined): PanelImage {
   const runs: Run[] = []
-  if (zh) runs.push({ text: zh, size: 28, weight: 500, color: INK, gap: 10 })
-  if (en) runs.push({ text: en, size: 22, weight: 400, color: QUIET, gap: 0 })
-  return fit(runs, 900, 420)
+  if (zh) runs.push({ text: zh, size: 52, weight: 500, color: INK, gap: 14 })
+  if (en) runs.push({ text: en, size: 40, weight: 500, color: INK, gap: 0 })
+  return fit(runs, 1280, 860)
 }
 
 export function makeMicroLabel(label: Pair, lang: Lang): PanelImage {

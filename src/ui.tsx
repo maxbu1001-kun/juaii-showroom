@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react'
 import {
   BRAND_LINE,
-  BRAND_NAME,
   CATALOG,
   CONTROLS,
   DISCLAIMER,
@@ -70,7 +69,7 @@ export function BrandBar({ lang, onLang }: { lang: Lang; onLang: (lang: Lang) =>
   return (
     <header className="brand">
       <div>
-        <h1 className="mark">{BRAND_NAME}</h1>
+        <h1 className="mark">JUΛII</h1>
         <p className="brand-line" translate="no">
           {BRAND_LINE}
         </p>
@@ -285,12 +284,19 @@ export function CatalogSheet({
       </div>
       {FIELD_ORDER.map((key) => {
         const field = CATALOG[sku][key]
+        const hotClass = hotSet.has(key) ? 'field is-hot' : 'field'
+        if (key === 'sku_id') {
+          return (
+            <div key={key} className={hotClass} data-field={key}>
+              <div className="field-block">
+                <p className="field-label zh">{field.label.zh}</p>
+                <p className="field-value zh">{field.value.zh}</p>
+              </div>
+            </div>
+          )
+        }
         return (
-          <div
-            key={key}
-            className={hotSet.has(key) ? 'field is-hot' : 'field'}
-            data-field={key}
-          >
+          <div key={key} className={hotClass} data-field={key}>
             {lang !== 'en' ? (
               <div className="field-block">
                 <p className="field-label zh">{field.label.zh}</p>
