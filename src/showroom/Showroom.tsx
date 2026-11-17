@@ -100,7 +100,7 @@ function cameraGoal(zone: Zone, sku: Sku | null): Goal {
   }
   switch (zone) {
     case 'j03':
-      return { pos: [2.45, 1.0, 5.15], target: [1.92, 0.45, 1.8] }
+      return { pos: [2.35, 1.12, 4.2], target: [1.35, 0.65, 1.25] }
     case 'j02':
       return { pos: [3.45, 1.08, 3.3], target: [4.55, 0.5, 1.15] }
     case 'wall':
