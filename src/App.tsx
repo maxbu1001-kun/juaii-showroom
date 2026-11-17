@@ -1,9 +1,12 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { armGuideAudio, playClip, settleWelcome, tryWelcome, useActiveClip } from './audio'
-import { CONTROLS, PARTS, SUBTITLES } from './copy'
+import { PARTS, SUBTITLES } from './copy'
 import type { FieldKey, Lang, PartId, Sku, Zone } from './copy'
-import { BrandBar, CatalogSheet, Disclaimer, StackedCopy, ZoneNav } from './ui'
+import { entryPose, NOTE_ROOMS, plinths, standingPose, startPose, type RoomId, type WalkPose } from './showroom/plan'
+import type { MovePad } from './showroom/Walker'
+import { BrandBar, CatalogSheet, Disclaimer } from './ui'
+import { WalkChrome } from './walk-ui'
 
 const Showroom = lazy(() => import('./showroom/Showroom'))
 
@@ -43,7 +46,6 @@ function hotFields(
 export default function App() {
   const [lang, setLang] = useState<Lang>('both')
   const [zone, setZone] = useState<Zone>('overview')
-  const [returnZone, setReturnZone] = useState<Exclude<Zone, 'closeup'>>('overview')
   const [sku, setSku] = useState<Sku | null>(null)
   const [part, setPart] = useState<PartId | null>(null)
   const [sizeMarks, setSizeMarks] = useState(false)
@@ -57,6 +59,20 @@ export default function App() {
   const skuRef = useRef(sku)
   const zoneRef = useRef(zone)
   const readyOnce = useRef(false)
+  const poseRef = useRef<WalkPose>(startPose())
+  const savedPose = useRef<WalkPose>(startPose())
+  const roomRef = useRef<RoomId>('B1')
+  const noted = useRef(new Set<RoomId>())
+  const headStamp = useRef(0)
+  const pad = useRef<MovePad>({ x: 0, z: 0 })
+  const [mode, setMode] = useState<'walk' | 'plan' | 'closeup'>('walk')
+  const [spawn, setSpawn] = useState({ serial: 1, pose: startPose() })
+  const [room, setRoom] = useState<RoomId>('B1')
+  const [heading, setHeading] = useState(0)
+  const [visited, setVisited] = useState<RoomId[]>(['B1'])
+  const [hintOn, setHintOn] = useState(true)
+  const [noteOn, setNoteOn] = useState(false)
+  const [feet, setFeet] = useState({ x: startPose().x, z: startPose().z })
 
   useEffect(() => {
     skuRef.current = sku
@@ -93,39 +109,35 @@ export default function App() {
     setFrameNonce((value) => value + 1)
   }, [])
 
-  const goZone = useCallback(
-    (next: Exclude<Zone, 'closeup'>) => {
-      clearStudy()
-      setZone(next)
-      setReturnZone(next)
-      bumpFrame()
+  const restoreWalk = useCallback(
+    (pose: WalkPose) => {
+      setMode('walk')
+      setZone('overview')
+      setSpawn((current) => ({ serial: current.serial + 1, pose }))
     },
-    [clearStudy, bumpFrame],
+    [],
   )
 
   const openCloseup = useCallback(() => {
     if (!skuRef.current) return
-    const current = zoneRef.current
-    if (current !== 'closeup') {
-      setReturnZone(current)
-    }
+    if (zoneRef.current !== 'closeup') savedPose.current = poseRef.current
     setZone('closeup')
+    setMode('closeup')
     bumpFrame()
   }, [bumpFrame])
 
   const exitCloseup = useCallback(() => {
     clearStudy()
-    setZone(returnZone)
-    bumpFrame()
-  }, [clearStudy, returnZone, bumpFrame])
+    restoreWalk(savedPose.current)
+  }, [clearStudy, restoreWalk])
 
   const collapseFocus = useCallback(() => {
     const current = zoneRef.current
     clearStudy()
     setSku(null)
-    if (current === 'closeup') setZone(returnZone)
+    if (current === 'closeup') restoreWalk(savedPose.current)
     void playClip('close').catch(() => {})
-  }, [clearStudy, returnZone])
+  }, [clearStudy, restoreWalk])
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -143,22 +155,12 @@ export default function App() {
   const openObject = useCallback(
     (id: Sku) => {
       const prev = skuRef.current
-      const currentZone = zoneRef.current
+      if (zoneRef.current !== 'closeup') savedPose.current = poseRef.current
       if (prev !== id) clearStudy()
       setSku(id)
-      if (prev && prev !== id) {
-        if (currentZone === 'closeup') {
-          bumpFrame()
-        } else if (currentZone === 'j03' && id === 'J02-01') {
-          setZone('j02')
-          setReturnZone('j02')
-          bumpFrame()
-        } else if (currentZone === 'j02' && id === 'J03-01') {
-          setZone('j03')
-          setReturnZone('j03')
-          bumpFrame()
-        }
-      }
+      setZone('closeup')
+      setMode('closeup')
+      bumpFrame()
       settleWelcome()
       void playClip(id).catch(() => {})
     },
@@ -166,15 +168,56 @@ export default function App() {
   )
 
   const onGuide = useCallback(() => {
-    if (zoneRef.current !== 'closeup') {
-      setZone('guide')
-      setReturnZone('guide')
-    }
     const current = skuRef.current
     if (!current) return
     settleWelcome()
     void playClip(current).catch(() => {})
   }, [])
+
+  const onPose = useCallback((pose: WalkPose & { room: RoomId }) => {
+    poseRef.current = pose
+    if (pose.room !== roomRef.current) {
+      roomRef.current = pose.room
+      setRoom(pose.room)
+      setVisited((current) => (current.includes(pose.room) ? current : [...current, pose.room]))
+      if (NOTE_ROOMS.includes(pose.room) && !noted.current.has(pose.room)) {
+        noted.current.add(pose.room)
+        setNoteOn(true)
+      }
+    }
+    const now = performance.now()
+    if (now - headStamp.current > 90) {
+      headStamp.current = now
+      setHeading(pose.yaw)
+      setFeet({ x: pose.x, z: pose.z })
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!noteOn) return
+    const timer = window.setTimeout(() => setNoteOn(false), 4200)
+    return () => window.clearTimeout(timer)
+  }, [noteOn, room])
+
+  const goPlan = useCallback(() => {
+    if (zoneRef.current === 'closeup') return
+    setMode('plan')
+  }, [])
+
+  const pickRoom = useCallback(
+    (id: RoomId) => {
+      restoreWalk(entryPose(id))
+    },
+    [restoreWalk],
+  )
+
+  const backToExhibit = useCallback(() => {
+    if (zoneRef.current === 'closeup') {
+      clearStudy()
+      setSku(null)
+    }
+    restoreWalk(standingPose())
+  }, [clearStudy, restoreWalk])
 
   const cyclePose = useCallback(() => {
     setPose((current) => (current === 0 ? 1 : current === 1 ? 2 : 0))
@@ -182,11 +225,15 @@ export default function App() {
 
   const screen: 'welcome' | 'close' | Sku = sku ?? (clip === 'close' ? 'close' : 'welcome')
   const hot = hotFields(sku, part, useLimits, clampNotes, sizeMarks)
+  const posts = plinths()
+  const approach = {
+    j03: Math.hypot(feet.x - posts[0].x, feet.z - posts[0].z) <= 2,
+    j02: Math.hypot(feet.x - posts[1].x, feet.z - posts[1].z) <= 2,
+  }
 
   return (
-    <div className={sku ? 'shell has-sheet' : 'shell'} aria-hidden={ready ? undefined : true}>
+    <div className={sku ? 'shell is-walk has-sheet' : 'shell is-walk'} aria-hidden={ready ? undefined : true}>
       <BrandBar lang={lang} onLang={setLang} />
-      <ZoneNav zone={zone} lang={lang} sku={sku} onZone={goZone} onCloseup={openCloseup} />
       <main className="stage">
         <SceneBoundary>
           <Suspense fallback={null}>
@@ -206,6 +253,13 @@ export default function App() {
               onPickPart={setPart}
               frameNonce={frameNonce}
               onRimOrbitDone={() => setRimOrbit(false)}
+              mode={mode}
+              spawn={spawn}
+              padRef={pad}
+              lightRoom={mode === 'closeup' ? 'B2' : room}
+              approach={approach}
+              onPose={onPose}
+              onPickRoom={pickRoom}
             />
           </Suspense>
         </SceneBoundary>
@@ -216,10 +270,21 @@ export default function App() {
           <button type="button" className="proxy" onClick={() => openObject('J02-01')}>
             J02-01
           </button>
-          <button type="button" className="proxy" onClick={onGuide}>
-            <StackedCopy zh={CONTROLS.jump_guide.zh} en={CONTROLS.jump_guide.en} lang={lang} />
-          </button>
         </div>
+        <WalkChrome
+          lang={lang}
+          mode={mode}
+          room={room}
+          heading={heading}
+          visited={visited}
+          hintOn={hintOn}
+          note={noteOn}
+          padRef={pad}
+          onDismissHint={() => setHintOn(false)}
+          onOverview={goPlan}
+          onBack={backToExhibit}
+          onMinimap={goPlan}
+        />
       </main>
       {sku ? (
         <CatalogSheet

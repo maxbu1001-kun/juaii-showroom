@@ -46,6 +46,23 @@ input {
     "foot foot foot";
 }
 
+.shell.is-walk,
+.shell.is-walk.has-sheet {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "brand"
+    "stage"
+    "foot";
+}
+
+.shell.is-walk.has-sheet {
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 24rem);
+  grid-template-areas:
+    "brand brand"
+    "stage sheet"
+    "foot foot";
+}
+
 .brand { grid-area: brand; }
 .nav { grid-area: nav; }
 .stage { grid-area: stage; }
@@ -308,23 +325,115 @@ button:focus-visible {
   .ctrl-en { font-size: 11px; }
 }
 
+.walk-ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: "IBM Plex Sans", "Noto Sans SC", sans-serif;
+  color: #2f2d2b;
+}
+
+.walk-hint,
+.walk-note {
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(36rem, calc(100% - 2rem));
+  padding: 0.55rem 0.75rem;
+  border-radius: 4px;
+  background: rgba(247, 245, 242, 0.88);
+  color: #2f2d2b;
+}
+
+.walk-hint { top: 0.8rem; pointer-events: auto; }
+.walk-note { top: 4.6rem; }
+
+.walk-hint p,
+.walk-note { margin: 0; font-size: 14px; line-height: 1.4; }
+
+.walk-dismiss,
+.walk-action {
+  border: 0;
+  border-radius: 4px;
+  background: rgba(247, 245, 242, 0.88);
+  color: #5e5a55;
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+}
+
+.walk-dismiss { margin-top: 0.45rem; }
+
+.walk-actions {
+  position: absolute;
+  left: 0.8rem;
+  bottom: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  pointer-events: auto;
+}
+
+.minimap {
+  position: absolute;
+  right: 0.8rem;
+  bottom: 0.8rem;
+  width: 9.2rem;
+  height: 9.2rem;
+  padding: 0.35rem;
+  border: 0;
+  border-radius: 4px;
+  background: #f7f5f2;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.minimap-svg { width: 100%; height: 100%; }
+.mini-new { fill: none; stroke: #6a655f; stroke-width: 0.08; }
+.mini-seen { fill: rgba(106, 101, 95, 0.25); stroke: #6a655f; stroke-width: 0.08; }
+.mini-here { fill: #2f2d2b; stroke: #2f2d2b; stroke-width: 0.08; }
+.mini-arrow { fill: #f7f5f2; }
+.mini-mark { fill: #2f2d2b; stroke: none; }
+
+.joystick {
+  position: absolute;
+  left: 0.8rem;
+  bottom: 6.4rem;
+  width: 7.2rem;
+  height: 7.2rem;
+  border-radius: 999px;
+  background: rgba(247, 245, 242, 0.55);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.joystick-knob {
+  position: absolute;
+  left: calc(50% - 1.3rem);
+  top: calc(50% - 1.3rem);
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 999px;
+  background: rgba(94, 90, 85, 0.72);
+}
+
 @media (max-width: 860px) {
   .shell,
-  .shell.has-sheet {
+  .shell.has-sheet,
+  .shell.is-walk,
+  .shell.is-walk.has-sheet {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas:
       "brand"
-      "nav"
       "stage"
       "foot";
   }
 
-  .shell.has-sheet {
-    grid-template-rows: auto auto minmax(8rem, 1fr) minmax(8rem, 34vh) auto;
+  .shell.is-walk.has-sheet {
+    grid-template-rows: auto minmax(8rem, 1fr) minmax(8rem, 34vh) auto;
     grid-template-areas:
       "brand"
-      "nav"
       "stage"
       "sheet"
       "foot";

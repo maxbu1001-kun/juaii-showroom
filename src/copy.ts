@@ -219,6 +219,23 @@ export const PARTS: Record<
   },
 }
 
+export const WALK_COPY = {
+  empty_note: { zh: "空间示意，暂无展品", en: "Spatial study. No objects on display yet." },
+  hint_desktop: {
+    zh: "WASD / 方向键移动 · 拖动鼠标转向 · 点地面前往",
+    en: "WASD / arrow keys to move · drag to look · click the floor to go there",
+  },
+  hint_mobile: {
+    zh: "摇杆移动 · 滑动转向 · 点地面前往",
+    en: "Joystick to move · swipe to look · tap the floor to go there",
+  },
+  hint_dismiss: { zh: "知道了", en: "Got it" },
+  overview: { zh: "回到总览", en: "Back to overview" },
+  back_exhibit: { zh: "回到展品间", en: "Back to the object room" },
+  minimap_current: { zh: "你在这里", en: "You are here" },
+  minimap_visited: { zh: "已到过", en: "Visited" },
+} as const
+
 export const ZONE_BUTTONS: readonly {
   readonly id: Exclude<Zone, 'closeup'> | 'closeup'
   readonly label: Pair

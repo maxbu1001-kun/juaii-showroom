@@ -15,6 +15,12 @@ import {
 import type { DirectionalLight, Group, Mesh, Object3D, WebGLRenderer } from 'three'
 import { PARTS } from '../copy'
 import type { Lang, Pair, PartId, Sku, Zone } from '../copy'
+import { Hall } from './Hall'
+import { HallLights } from './HallLights'
+import { cardMounts, closeupGoal, guidePost, plinths, screenCamera, screenMount } from './plan'
+import type { RoomId, WalkPose } from './plan'
+import { PlanView, Walker } from './Walker'
+import type { MovePad } from './Walker'
 import {
   getBrushedMap,
   makeFactPanel,
@@ -41,6 +47,13 @@ export type ShowroomProps = {
   onGuide: () => void
   onPickPart: (part: PartId) => void
   onRimOrbitDone: () => void
+  mode: 'walk' | 'plan' | 'closeup'
+  spawn: { serial: number; pose: WalkPose }
+  padRef: RefObject<MovePad>
+  lightRoom: RoomId
+  approach: { j03: boolean; j02: boolean }
+  onPose: (pose: WalkPose & { room: RoomId }) => void
+  onPickRoom: (room: RoomId) => void
 }
 
 /** Human-scale room. 1 unit = 1 meter. Inner faces meet at x0/z0; the front plane is open. */
@@ -57,9 +70,6 @@ const ROOM = {
 
 const PLINTH_H = 0.08
 const PLINTH_S = 0.46
-const J03 = { x: 1.92, z: 2.18 }
-const J02 = { x: 4.48, z: 2.18 }
-const GUIDE = { x: 3.2, z: 2.85 }
 const POST_H = 0.62
 const SCREEN_W = 1.68
 const SCREEN_H = (1.68 * 9) / 16
@@ -92,12 +102,8 @@ function clampInto(p: Vector3): void {
 }
 
 function cameraGoal(zone: Zone, sku: Sku | null): Goal {
-  if (zone === 'closeup') {
-    if (sku === 'J02-01') {
-      return { pos: [4.55, 0.55, 2.9], target: [4.48, 0.4, 2.15] }
-    }
-    return { pos: [1.92, 0.28, 2.64], target: [1.92, 0.18, 2.12] }
-  }
+  if (zone === 'closeup') return closeupGoal(sku ?? 'J03-01')
+  if (zone === 'screen') return screenCamera()
   switch (zone) {
     case 'j03':
       return { pos: [2.35, 1.12, 4.2], target: [1.35, 0.65, 1.25] }
@@ -107,8 +113,6 @@ function cameraGoal(zone: Zone, sku: Sku | null): Goal {
       return { pos: [3.2, 1.5, 4.48], target: [3.2, 1.32, 0.12] }
     case 'guide':
       return { pos: [3.2, 1.57, 4.95], target: [3.2, 0.95, 1.2] }
-    case 'screen':
-      return { pos: [2.55, 1.42, 3.05], target: [0.12, 1.28, 1.62] }
     default:
       return { pos: [4.7, 1.5, 5.1], target: [3.4, 1.0, 1.05] }
   }
@@ -349,7 +353,7 @@ function CameraRig({
   return <CameraControls ref={controlsRef} makeDefault dollyToCursor={false} />
 }
 
-function Confine({
+export function Confine({
   controlsRef,
 }: {
   controlsRef: RefObject<CameraControlsImpl | null>
@@ -547,6 +551,7 @@ function Tray({
   onOpen,
   onPickPart,
   onRimOrbitDone,
+  approach,
 }: {
   selected: boolean
   closeup: boolean
@@ -558,6 +563,7 @@ function Tray({
   onOpen: () => void
   onPickPart: (part: PartId) => void
   onRimOrbitDone: () => void
+  approach: boolean
 }) {
   const map = useMemo(() => getBrushedMap(), [])
   const trayMat = useMemo(
@@ -666,7 +672,7 @@ function Tray({
               </group>
             )
           })
-        : (
+        : approach ? (
           <group position={[0, 0.05, 0]}>
             <OutlineHotspot
               radius={0.032}
@@ -676,7 +682,7 @@ function Tray({
               epoch={epoch}
             />
           </group>
-        )}
+        ) : null}
     </group>
   )
 }
@@ -729,6 +735,7 @@ function Stand({
   pose,
   onOpen,
   onPickPart,
+  approach,
 }: {
   selected: boolean
   closeup: boolean
@@ -739,6 +746,7 @@ function Stand({
   pose: 0 | 1 | 2
   onOpen: () => void
   onPickPart: (part: PartId) => void
+  approach: boolean
 }) {
   const pivot = useRef<Group>(null)
   const tilt = useRef<number>(POSE_X[0])
@@ -902,7 +910,7 @@ function Stand({
             />
           </group>
         </>
-      ) : (
+      ) : approach ? (
         <group position={[0, 0.18, 0.04]}>
           <mesh {...pickHandlers(onOpen)}>
             <boxGeometry args={[0.36, 0.46, 0.32]} />
@@ -919,7 +927,7 @@ function Stand({
             />
           </group>
         </group>
-      )}
+      ) : null}
     </group>
   )
 }
@@ -930,6 +938,7 @@ function FactCard({
   epoch,
   selected,
   position,
+  rotation = [0, 0, 0],
   onOpen,
 }: {
   sku: Sku
@@ -937,6 +946,7 @@ function FactCard({
   epoch: number
   selected: boolean
   position: [number, number, number]
+  rotation?: [number, number, number]
   onOpen: () => void
 }) {
   const image = usePanel(
@@ -948,7 +958,7 @@ function FactCard({
   const w = 1.16
   const h = Math.min(2.12, w / image.aspect)
   return (
-    <group position={position}>
+    <group position={position} rotation={rotation}>
       <RectOutline
         w={w}
         h={h}
@@ -985,6 +995,7 @@ function ScreenPanel({
   lang: Lang
   epoch: number
 }) {
+  const mount = screenMount()
   const image = usePanel(
     useMemo(() => {
       void epoch
@@ -993,7 +1004,7 @@ function ScreenPanel({
   )
   const bezel = 0.03
   return (
-    <group position={[0.01 + SCREEN_D / 2, 1.32, 1.7]} rotation={[0, Math.PI / 2, 0]}>
+    <group position={[mount.x, mount.y, mount.z]} rotation={[0, mount.rotY, 0]}>
       <mesh>
         <boxGeometry args={[SCREEN_W + bezel, SCREEN_H + bezel, SCREEN_D]} />
         <meshStandardMaterial color="#ebe6de" roughness={0.96} metalness={0} />
@@ -1006,7 +1017,7 @@ function ScreenPanel({
   )
 }
 
-function RoomShell({
+export function RoomShell({
   wall,
   floor,
   ceil,
@@ -1052,7 +1063,7 @@ function RoomShell({
   )
 }
 
-function RoomLights() {
+export function RoomLights() {
   const wash = useRef<DirectionalLight>(null)
   const washAt = useRef<Object3D>(null)
   const bounce = useRef<DirectionalLight>(null)
@@ -1082,59 +1093,24 @@ function RoomLights() {
 
 function Room(props: ShowroomProps & { epoch: number }) {
   const closeup = props.zone === 'closeup'
-  const wall = useMemo(
-    () => new MeshStandardMaterial({ color: '#f3f1ec', roughness: 0.93, metalness: 0 }),
-    [],
-  )
-  const floor = useMemo(
-    () => new MeshStandardMaterial({ color: '#d5cfc3', roughness: 1, metalness: 0 }),
-    [],
-  )
-  const ceil = useMemo(
-    () => new MeshStandardMaterial({ color: '#f3f1ec', roughness: 1, metalness: 0, emissive: '#000000' }),
-    [],
-  )
   const plinth = useMemo(
     () => new MeshStandardMaterial({ color: '#ebe6de', roughness: 0.97, metalness: 0 }),
     [],
   )
-  const ghost = useMemo(
-    () =>
-      new MeshStandardMaterial({
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-        colorWrite: false,
-        side: DoubleSide,
-      }),
-    [],
-  )
-  useEffect(
-    () => () => {
-      wall.dispose()
-      floor.dispose()
-      ceil.dispose()
-      plinth.dispose()
-      ghost.dispose()
-    },
-    [wall, floor, ceil, plinth, ghost],
-  )
-  const cx = (ROOM.x0 + ROOM.x1) / 2
+  useEffect(() => () => plinth.dispose(), [plinth])
+  const spots = plinths()
+  const j03 = spots[0]
+  const j02 = spots[1]
+  const cards = cardMounts()
+  const post = guidePost()
   return (
     <group>
-      <group name="room-shell">
-        <RoomShell wall={wall} floor={floor} ceil={ceil} />
-        <mesh position={[cx, ROOM.h / 2, ROOM.z1]} material={ghost}>
-          <planeGeometry args={[ROOM.x1 - ROOM.x0, ROOM.h]} />
+      {spots.map((spot) => (
+        <mesh key={spot.sku} position={[spot.x, PLINTH_H / 2, spot.z]} material={plinth}>
+          <boxGeometry args={[PLINTH_S, PLINTH_H, PLINTH_S]} />
         </mesh>
-      </group>
-      <mesh position={[J03.x, PLINTH_H / 2, J03.z]} material={plinth}>
-        <boxGeometry args={[PLINTH_S, PLINTH_H, PLINTH_S]} />
-      </mesh>
-      <mesh position={[J02.x, PLINTH_H / 2, J02.z]} material={plinth}>
-        <boxGeometry args={[PLINTH_S, PLINTH_H, PLINTH_S]} />
-      </mesh>
-      <group position={[J03.x, PLINTH_H, J03.z]}>
+      ))}
+      <group position={[j03.x, PLINTH_H, j03.z]}>
         <Tray
           selected={props.sku === 'J03-01'}
           closeup={closeup && props.sku === 'J03-01'}
@@ -1143,12 +1119,15 @@ function Room(props: ShowroomProps & { epoch: number }) {
           part={props.part}
           sizeMarks={props.sizeMarks && closeup && props.sku === 'J03-01'}
           rimOrbit={props.rimOrbit && closeup && props.sku === 'J03-01'}
-          onOpen={() => props.onOpenSku('J03-01')}
+          onOpen={() => {
+            if (props.approach.j03) props.onOpenSku('J03-01')
+          }}
           onPickPart={props.onPickPart}
           onRimOrbitDone={props.onRimOrbitDone}
+          approach={props.approach.j03}
         />
       </group>
-      <group position={[J02.x, PLINTH_H, J02.z]}>
+      <group position={[j02.x, PLINTH_H, j02.z]}>
         <Stand
           selected={props.sku === 'J02-01'}
           closeup={closeup && props.sku === 'J02-01'}
@@ -1157,40 +1136,32 @@ function Room(props: ShowroomProps & { epoch: number }) {
           part={props.part}
           clampNotes={props.clampNotes && closeup && props.sku === 'J02-01'}
           pose={props.pose}
-          onOpen={() => props.onOpenSku('J02-01')}
+          onOpen={() => {
+            if (props.approach.j02) props.onOpenSku('J02-01')
+          }}
           onPickPart={props.onPickPart}
+          approach={props.approach.j02}
         />
       </group>
-      <FactCard
-        sku="J03-01"
-        lang={props.lang}
-        epoch={props.epoch}
-        selected={props.sku === 'J03-01'}
-        position={[J03.x, 1.32, 0.018]}
-        onOpen={() => props.onOpenSku('J03-01')}
-      />
-      <FactCard
-        sku="J02-01"
-        lang={props.lang}
-        epoch={props.epoch}
-        selected={props.sku === 'J02-01'}
-        position={[J02.x, 1.32, 0.018]}
-        onOpen={() => props.onOpenSku('J02-01')}
-      />
+      {cards.map((card) => (
+        <FactCard
+          key={card.sku}
+          sku={card.sku ?? 'J03-01'}
+          lang={props.lang}
+          epoch={props.epoch}
+          selected={props.sku === card.sku}
+          position={[card.x, card.y, card.z]}
+          rotation={[0, card.rotY, 0]}
+          onOpen={() => {
+            if (card.sku) props.onOpenSku(card.sku)
+          }}
+        />
+      ))}
       <ScreenPanel mode={props.screen} lang={props.lang} epoch={props.epoch} />
-      <group position={[GUIDE.x, 0, GUIDE.z]}>
+      <group position={[post.x, 0, post.z]}>
         <mesh position={[0, POST_H / 2, 0]} material={plinth}>
           <boxGeometry args={[0.045, POST_H, 0.045]} />
         </mesh>
-        <group position={[0, POST_H + 0.03, 0]}>
-          <OutlineHotspot
-            radius={0.04}
-            selected={props.zone === 'guide'}
-            onActivate={props.onGuide}
-            lang={props.lang}
-            epoch={props.epoch}
-          />
-        </group>
       </group>
     </group>
   )
@@ -1205,24 +1176,29 @@ export default function Showroom(props: ShowroomProps) {
   const epoch = useFontEpoch()
   const controlsRef = useRef<CameraControlsImpl>(null)
   const cameraKey = `${props.zone}:${props.zone === 'closeup' ? (props.sku ?? '') : ''}:${props.frameNonce}`
-  const overview = cameraGoal('overview', null)
+  const start = props.spawn.pose
   return (
     <Canvas
       className="webgl"
       dpr={[1, 1.25]}
-      camera={{ fov: 54, near: 0.06, far: 28, position: overview.pos }}
+      camera={{ fov: 50, near: 0.06, far: 80, position: [start.x, start.y, start.z] }}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       onCreated={({ gl, camera }) => {
         configureRenderer(gl)
-        camera.lookAt(overview.target[0], overview.target[1], overview.target[2])
+        camera.rotation.order = 'YXZ'
+        camera.rotation.set(start.pitch, -start.yaw, 0)
         requestAnimationFrame(() => props.onReady())
       }}
     >
       <color attach="background" args={['#e8e5e0']} />
-      <RoomLights />
-      <CameraRig cameraKey={cameraKey} onReady={props.onReady} controlsRef={controlsRef} />
+      <HallLights room={props.lightRoom} />
+      <Hall />
+      {props.mode === 'closeup' ? (
+        <CameraRig cameraKey={cameraKey} onReady={props.onReady} controlsRef={controlsRef} />
+      ) : null}
+      {props.mode === 'plan' ? <PlanView active onPick={props.onPickRoom} /> : null}
+      <Walker active={props.mode === 'walk'} spawn={props.spawn} padRef={props.padRef} onSample={props.onPose} />
       <Room {...props} epoch={epoch} />
-      <Confine controlsRef={controlsRef} />
     </Canvas>
   )
 }
