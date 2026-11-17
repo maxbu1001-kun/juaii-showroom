@@ -4,7 +4,8 @@ import { b2Center, b2Radius, plinths, rectOf, type RoomId } from './plan'
 
 const RING = 12
 const WALL_POINT = 0
-const OBJECT_POINT = 3.2
+// Short reach so the fill stays on the plinth and the object, not the floor or a far wall.
+const OBJECT_POINT = 0.18
 
 export function HallLights({ room }: { room: RoomId }) {
   const dirs = useRef<(DirectionalLight | null)[]>([])
@@ -28,8 +29,10 @@ export function HallLights({ room }: { room: RoomId }) {
 
   return (
     <>
-      <hemisphereLight args={['#f3f1ec', '#f3f1ec', 1.55]} />
-      <ambientLight color="#f3f1ec" intensity={0.4} />
+      {/* Equal white sky and ground. The wash is not occluded, so a wall seen
+          through a doorway stays the same color as the wall in the current room. */}
+      <hemisphereLight args={['#ffffff', '#ffffff', 2.2]} />
+      <ambientLight color="#ffffff" intensity={0} />
       {Array.from({ length: 4 }, (_, index) => {
         const placed = directionalPose(room, index)
         return (
@@ -90,11 +93,11 @@ export function HallLights({ room }: { room: RoomId }) {
           ref={(node) => {
             objects.current[index] = node
           }}
-          color="#f3f2ef"
+          color="#ffffff"
           intensity={OBJECT_POINT}
-          distance={2.4}
+          distance={0.16}
           decay={2}
-          position={[post.x, 1.05, post.z]}
+          position={[post.x, 0.11, post.z + 0.08]}
         />
       ))}
     </>

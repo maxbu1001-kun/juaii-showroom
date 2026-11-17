@@ -3,12 +3,17 @@ import type { ReactNode } from 'react'
 import { armGuideAudio, playClip, settleWelcome, tryWelcome, useActiveClip } from './audio'
 import { PARTS, SUBTITLES } from './copy'
 import type { FieldKey, Lang, PartId, Sku, Zone } from './copy'
-import { entryPose, NOTE_ROOMS, plinths, standingPose, startPose, type RoomId, type WalkPose } from './showroom/plan'
+import { entryPose, NOTE_ROOMS, plinths, roomAt, shotPose, standingPose, startPose, type RoomId, type WalkPose } from './showroom/plan'
 import type { MovePad } from './showroom/Walker'
 import { BrandBar, CatalogSheet, Disclaimer } from './ui'
 import { WalkChrome } from './walk-ui'
 
 const Showroom = lazy(() => import('./showroom/Showroom'))
+
+function openingPose(): WalkPose {
+  if (typeof window === 'undefined') return startPose()
+  return shotPose(new URLSearchParams(window.location.search).get('shot')) ?? startPose()
+}
 
 type BoundaryState = { failed: boolean }
 
@@ -59,20 +64,22 @@ export default function App() {
   const skuRef = useRef(sku)
   const zoneRef = useRef(zone)
   const readyOnce = useRef(false)
-  const poseRef = useRef<WalkPose>(startPose())
-  const savedPose = useRef<WalkPose>(startPose())
-  const roomRef = useRef<RoomId>('B1')
+  const [opening] = useState(openingPose)
+  const openingRoom = roomAt(opening.x, opening.z) ?? 'B1'
+  const poseRef = useRef<WalkPose>(opening)
+  const savedPose = useRef<WalkPose>(opening)
+  const roomRef = useRef<RoomId>(openingRoom)
   const noted = useRef(new Set<RoomId>())
   const headStamp = useRef(0)
   const pad = useRef<MovePad>({ x: 0, z: 0 })
   const [mode, setMode] = useState<'walk' | 'plan' | 'closeup'>('walk')
-  const [spawn, setSpawn] = useState({ serial: 1, pose: startPose() })
-  const [room, setRoom] = useState<RoomId>('B1')
-  const [heading, setHeading] = useState(0)
-  const [visited, setVisited] = useState<RoomId[]>(['B1'])
+  const [spawn, setSpawn] = useState({ serial: 1, pose: opening })
+  const [room, setRoom] = useState<RoomId>(openingRoom)
+  const [heading, setHeading] = useState(opening.yaw)
+  const [visited, setVisited] = useState<RoomId[]>([openingRoom])
   const [hintOn, setHintOn] = useState(true)
   const [noteOn, setNoteOn] = useState(false)
-  const [feet, setFeet] = useState({ x: startPose().x, z: startPose().z })
+  const [feet, setFeet] = useState({ x: opening.x, z: opening.z })
 
   useEffect(() => {
     skuRef.current = sku

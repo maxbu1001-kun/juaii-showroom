@@ -234,6 +234,25 @@ export function standingPose(): WalkPose {
   return { x: c.x + 0, y: EYE_Y, z: c.z + exhibitStandingZ, yaw: 0, pitch: 0 }
 }
 
+export function shotPose(name: string | null): WalkPose | null {
+  if (name === 'stand') return standingPose()
+  if (name === 'b3') {
+    const c = b2Center()
+    return { x: c.x, y: EYE_Y, z: c.z - 2, yaw: 0, pitch: 0 }
+  }
+  if (name === 'a1') {
+    const room = rectOf('A1')
+    return {
+      x: room.maxX - 0.9,
+      y: EYE_Y,
+      z: (room.minZ + room.maxZ) / 2,
+      yaw: Math.PI / 2,
+      pitch: 0,
+    }
+  }
+  return null
+}
+
 export function entryPose(id: RoomId): WalkPose {
   if (id === 'B1') return startPose()
   if (id === 'B2') {
