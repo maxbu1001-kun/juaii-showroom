@@ -100,7 +100,7 @@ function cameraGoal(zone: Zone, sku: Sku | null): Goal {
   }
   switch (zone) {
     case 'j03':
-      return { pos: [2.45, 1.08, 3.45], target: [1.92, 0.35, 1.75] }
+      return { pos: [2.45, 1.0, 5.15], target: [1.92, 0.45, 1.8] }
     case 'j02':
       return { pos: [3.45, 1.08, 3.3], target: [4.55, 0.5, 1.15] }
     case 'wall':
@@ -1072,10 +1072,10 @@ function RoomLights() {
       <object3D ref={washAt} position={[3.2, 1.45, 0]} />
       <directionalLight ref={bounce} color="#f3f1ec" intensity={1.15} position={[3.2, 0.15, 2.7]} />
       <object3D ref={bounceAt} position={[3.2, 2.7, 2.7]} />
-      <directionalLight ref={sideFill} color="#f3f1ec" intensity={0.9} position={[5.8, 1.45, 2.8]} />
-      <object3D ref={sideFillAt} position={[0.4, 1.45, 2.8]} />
-      <pointLight color="#f6f5f2" intensity={5} distance={9} decay={2} position={[2.2, 2.05, 4.9]} />
-      <pointLight color="#f6f5f2" intensity={5} distance={9} decay={2} position={[4.3, 2.05, 4.9]} />
+      <directionalLight ref={sideFill} color="#f3f2ef" intensity={1.24} position={[5.8, 1.28, 1.9]} />
+      <object3D ref={sideFillAt} position={[0.3, 1.2, 1.7]} />
+      <pointLight color="#f3f2ef" intensity={1.4} distance={8} decay={2} position={[3.6, 1.35, 3.3]} />
+      <pointLight color="#f3f2ef" intensity={1.8} distance={8} decay={2} position={[4.9, 1.45, 3.8]} />
     </>
   )
 }

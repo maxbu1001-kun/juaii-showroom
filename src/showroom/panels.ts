@@ -91,8 +91,16 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): st
   return lines.length > 0 ? lines : ['']
 }
 
-function paint(runs: readonly Run[], scale: number, width: number, ground: string): HTMLCanvasElement {
-  const pad = Math.round(36 * scale)
+function paint(
+  runs: readonly Run[],
+  scale: number,
+  width: number,
+  ground: string,
+  padBase = 36,
+  lineFactor = 1.38,
+  leadFactor = 0.28,
+): HTMLCanvasElement {
+  const pad = Math.round(padBase * scale)
   const probe = document.createElement('canvas').getContext('2d')
   if (!probe) throw new Error('canvas')
   const laid: { text: string; size: number; weight: 400 | 500; color: string; gap: number }[] = []
@@ -102,15 +110,16 @@ function paint(runs: readonly Run[], scale: number, width: number, ground: strin
     probe.font = font(size, run.weight)
     const lines = wrap(probe, run.text, width - pad * 2)
     const gap = Math.round(run.gap * scale)
+    const lead = Math.round(size * leadFactor)
     lines.forEach((text, index) => {
       laid.push({
         text,
         size,
         weight: run.weight,
         color: run.color,
-        gap: index === lines.length - 1 ? gap : Math.round(size * 0.28),
+        gap: index === lines.length - 1 ? gap : lead,
       })
-      height += Math.round(size * 1.38) + (index === lines.length - 1 ? gap : Math.round(size * 0.28))
+      height += Math.round(size * lineFactor) + (index === lines.length - 1 ? gap : lead)
     })
   }
   height += pad
@@ -127,7 +136,7 @@ function paint(runs: readonly Run[], scale: number, width: number, ground: strin
     ctx.fillStyle = line.color
     ctx.textBaseline = 'top'
     ctx.fillText(line.text, pad, y)
-    y += Math.round(line.size * 1.38) + line.gap
+    y += Math.round(line.size * lineFactor) + line.gap
   }
   return canvas
 }
@@ -190,11 +199,11 @@ function composeScreen(runs: readonly Run[], ground: string): PanelImage {
   const width = 1280
   const height = 720
   let scale = 1
-  let canvas = paint(runs, scale, width, ground)
+  let canvas = paint(runs, scale, width, ground, 28, 1.22, 0.16)
   let guard = 0
   while (canvas.height > height && guard < 6) {
     scale *= height / canvas.height
-    canvas = paint(runs, scale, width, ground)
+    canvas = paint(runs, scale, width, ground, 28, 1.22, 0.16)
     guard += 1
   }
   const out = document.createElement('canvas')
@@ -215,15 +224,15 @@ function composeScreen(runs: readonly Run[], ground: string): PanelImage {
 export function makeScreenPanel(mode: 'welcome' | 'close' | Sku, lang: Lang): PanelImage {
   const runs: Run[] = []
   if (mode === 'welcome') {
-    runs.push({ text: WELCOME, size: 26, weight: 400, color: INK, gap: 20 })
+    runs.push({ text: WELCOME, size: 52, weight: 400, color: INK, gap: 28 })
   } else if (mode === 'close') {
-    runs.push({ text: CLOSE, size: 26, weight: 400, color: INK, gap: 20 })
+    runs.push({ text: CLOSE, size: 52, weight: 400, color: INK, gap: 28 })
   } else {
-    runs.push({ text: SUBTITLES[mode], size: 20, weight: 400, color: INK, gap: 22 })
+    runs.push({ text: SUBTITLES[mode], size: 28, weight: 400, color: INK, gap: 18 })
     runs.push(...fieldRuns(mode, lang))
   }
-  runs.push({ text: DISCLAIMER.zh, size: 16, weight: 400, color: MUTED, gap: 4 })
-  runs.push({ text: DISCLAIMER.en, size: 14, weight: 400, color: QUIET, gap: 0 })
+  runs.push({ text: DISCLAIMER.zh, size: 48, weight: 400, color: MUTED, gap: 10 })
+  runs.push({ text: DISCLAIMER.en, size: 36, weight: 400, color: QUIET, gap: 0 })
   return composeScreen(runs, SCREEN)
 }
 
