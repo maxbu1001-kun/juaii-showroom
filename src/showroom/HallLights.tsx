@@ -1,22 +1,27 @@
 import { useLayoutEffect, useRef } from 'react'
-import type { DirectionalLight, Object3D, PointLight } from 'three'
+import type { DirectionalLight, Object3D, PointLight, SpotLight } from 'three'
 import { b2Center, b2Radius, plinths, rectOf, type RoomId } from './plan'
 
 const RING = 12
 const WALL_POINT = 0
-// Short reach so the fill stays on the plinth and the object, not the floor or a far wall.
-const OBJECT_POINT = 0.18
+// Narrow cone. It dies before the floor around the plinth and never reaches the arc.
+const OBJECT_SPOT = 28
 
 export function HallLights({ room }: { room: RoomId }) {
   const dirs = useRef<(DirectionalLight | null)[]>([])
   const dirTargets = useRef<(Object3D | null)[]>([])
   const ring = useRef<(PointLight | null)[]>([])
   const keep = useRef<(PointLight | null)[]>([])
-  const objects = useRef<(PointLight | null)[]>([])
+  const objects = useRef<(SpotLight | null)[]>([])
+  const objectTargets = useRef<(Object3D | null)[]>([])
 
   useLayoutEffect(() => {
     dirs.current.forEach((light, index) => {
       const target = dirTargets.current[index]
+      if (light && target) light.target = target
+    })
+    objects.current.forEach((light, index) => {
+      const target = objectTargets.current[index]
       if (light && target) light.target = target
     })
   }, [room])
@@ -88,17 +93,26 @@ export function HallLights({ room }: { room: RoomId }) {
         />
       ))}
       {posts.map((post, index) => (
-        <pointLight
-          key={post.sku}
-          ref={(node) => {
-            objects.current[index] = node
-          }}
-          color="#ffffff"
-          intensity={OBJECT_POINT}
-          distance={0.16}
-          decay={2}
-          position={[post.x, 0.11, post.z + 0.08]}
-        />
+        <group key={post.sku}>
+          <spotLight
+            ref={(node) => {
+              objects.current[index] = node
+            }}
+            color="#f3f2ef"
+            intensity={OBJECT_SPOT}
+            angle={0.42}
+            penumbra={0.45}
+            decay={2}
+            distance={0.38}
+            position={[post.x, 0.4, post.z + 0.16]}
+          />
+          <object3D
+            ref={(node) => {
+              objectTargets.current[index] = node
+            }}
+            position={[post.x, 0.14, post.z]}
+          />
+        </group>
       ))}
     </>
   )

@@ -17,7 +17,7 @@ import { PARTS } from '../copy'
 import type { Lang, Pair, PartId, Sku, Zone } from '../copy'
 import { Hall } from './Hall'
 import { HallLights } from './HallLights'
-import { cardMounts, closeupGoal, guidePost, plinths, screenCamera, screenMount } from './plan'
+import { cardMounts, closeupGoal, guidePost, plinths, SCREEN_D, SCREEN_W, screenCamera, screenMount } from './plan'
 import type { RoomId, WalkPose } from './plan'
 import { PlanView, Walker } from './Walker'
 import type { MovePad } from './Walker'
@@ -71,9 +71,7 @@ const ROOM = {
 const PLINTH_H = 0.08
 const PLINTH_S = 0.46
 const POST_H = 0.62
-const SCREEN_W = 1.68
-const SCREEN_H = (1.68 * 9) / 16
-const SCREEN_D = 0.05
+const SCREEN_H = (SCREEN_W * 9) / 16
 const POSE_X = [-0.36, -0.74, -1.12] as const
 
 const CAM_BOX = {

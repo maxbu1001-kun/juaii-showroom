@@ -1,12 +1,10 @@
-// Floor plan v2 — visual review passed. Two choices are still pending the
-// owner's decision and are switches: b2DiameterM (7.2 default, 8 alternative)
-// and screenRoom ('B1' default, 'B2' alternative). Do not treat other numbers
-// here as a finished interior design.
+// Floor plan v3. Column B and row 2 follow the round room. Mounts below are
+// B2-local: origin at the center, −z toward B3.
 
 import type { Sku } from '../copy'
 
-export const b2DiameterM = 7.2
-export const screenRoom: 'B1' | 'B2' = 'B1'
+export const b2DiameterM = 8.0
+export const screenRoom: 'B1' | 'B2' = 'B2'
 
 export const WALL_T = 0.22
 export const ROOM_H = 2.62
@@ -21,7 +19,13 @@ export const BODY_R = 0.3
 export const HFOV_DEG = 65
 export const NEAR_PLINTH = 2
 
-export const exhibitStandingZ = 2.6
+export const SCREEN_W = 1.68
+export const SCREEN_D = 0.05
+export const SCREEN_CHORD_W = 1.9
+export const STAND_INSET = 1
+export const PLINTH_X = 1.34
+export const PLINTH_Z = -1.34
+export const GUIDE_ALONG = 2
 
 export type RoomId = 'A1' | 'B1' | 'C1' | 'A2' | 'B2' | 'C2' | 'A3' | 'B3' | 'C3'
 
@@ -41,8 +45,9 @@ export type Seg = { ax: number; az: number; bx: number; bz: number; nx: number; 
 
 export type LabelSpec = { text: RoomId; x: number; y: number; z: number; rotY: number }
 
-const COL_W = { A: 6.4, B: 7.2, C: 6.4 } as const
-const ROW_D = { 1: 5.6, 2: 7.2, 3: 5.6 } as const
+// Column B and row 2 match the round room, so the circle stays tangent to its cell.
+const COL_W = { A: 6.4, B: b2DiameterM, C: 6.4 }
+const ROW_D = { 1: 5.6, 2: b2DiameterM, 3: 5.6 }
 
 export function b2Radius(): number {
   return b2DiameterM / 2
@@ -92,12 +97,30 @@ export function exhibitRoom(): 'B2' {
   return 'B2'
 }
 
-function chordAngles(radius: number): { center: number; half: number }[] {
-  const half = Math.asin((CHORD_W / 2) / radius)
+// θ = 0 is +z (toward B1). Front-left 45° is the (−x, +z) quadrant.
+const SCREEN_ANGLE = -Math.PI / 4
+const GUIDE_ANGLE = -SCREEN_ANGLE
+
+export function screenChordWidth(): number {
+  return SCREEN_CHORD_W
+}
+
+function cardChordAngles(radius: number): { center: number; half: number }[] {
+  const half = Math.asin(CHORD_W / 2 / radius)
   return [
     { center: -Math.PI * 0.75, half },
     { center: Math.PI * 0.75, half },
   ]
+}
+
+function screenChordAngle(radius: number): { center: number; half: number } {
+  return { center: SCREEN_ANGLE, half: Math.asin(screenChordWidth() / 2 / radius) }
+}
+
+function wallChordAngles(radius: number): { center: number; half: number }[] {
+  const cuts = cardChordAngles(radius)
+  if (screenRoom === 'B2') cuts.push(screenChordAngle(radius))
+  return cuts
 }
 
 export function doorArcs(radius: number): { center: number; half: number; width: number }[] {
@@ -124,7 +147,7 @@ export function angleIn(a: number, center: number, half: number): boolean {
 export type Cut = { center: number; half: number }
 
 export function chordCuts(): { center: number; half: number }[] {
-  return chordAngles(b2Radius())
+  return wallChordAngles(b2Radius())
 }
 
 export function doorOnlyCuts(): { center: number; half: number; width: number }[] {
@@ -133,7 +156,7 @@ export function doorOnlyCuts(): { center: number; half: number; width: number }[
 
 export function b2Cuts(): Cut[] {
   const radius = b2Radius()
-  return [...doorArcs(radius), ...chordAngles(radius)]
+  return [...doorArcs(radius), ...wallChordAngles(radius)]
 }
 
 export function solidArcSpans(): { a0: number; a1: number }[] {
@@ -166,14 +189,21 @@ export type Mount = {
   sku?: Sku
 }
 
+function chordFace(radius: number, center: number, halfWidth: number): { x: number; z: number; rotY: number } {
+  const mid = Math.sqrt(radius * radius - halfWidth * halfWidth)
+  const ox = Math.sin(center)
+  const oz = Math.cos(center)
+  return { x: ox * mid, z: oz * mid, rotY: center + Math.PI }
+}
+
 function chordMount(index: 0 | 1): Mount {
   const radius = b2Radius()
-  const cut = chordAngles(radius)[index]
-  const mid = Math.sqrt(radius * radius - (CHORD_W / 2) ** 2)
-  const ox = Math.sin(cut.center)
-  const oz = Math.cos(cut.center)
-  const world = localToWorld(ox * (mid - 0.012), oz * (mid - 0.012))
-  return { x: world.x, y: 1.32, z: world.z, rotY: cut.center + Math.PI, sku: index === 0 ? 'J03-01' : 'J02-01' }
+  const cut = cardChordAngles(radius)[index]
+  const face = chordFace(radius, cut.center, CHORD_W / 2)
+  const inset = 0.004
+  const scale = (Math.hypot(face.x, face.z) - inset) / Math.hypot(face.x, face.z)
+  const world = localToWorld(face.x * scale, face.z * scale)
+  return { x: world.x, y: 1.32, z: world.z, rotY: face.rotY, sku: index === 0 ? 'J03-01' : 'J02-01' }
 }
 
 export function cardMounts(): Mount[] {
@@ -182,21 +212,31 @@ export function cardMounts(): Mount[] {
 
 export function plinths(): { sku: Sku; x: number; z: number }[] {
   return [
-    { sku: 'J03-01', ...localToWorld(-1.13, -1.13) },
-    { sku: 'J02-01', ...localToWorld(1.13, -1.13) },
+    { sku: 'J03-01', ...localToWorld(-PLINTH_X, PLINTH_Z) },
+    { sku: 'J02-01', ...localToWorld(PLINTH_X, PLINTH_Z) },
   ]
 }
 
 export function guidePost(): { x: number; z: number } {
-  return localToWorld(1.84, 1.84)
+  const radial = GUIDE_ALONG * Math.SQRT2
+  return localToWorld(Math.sin(GUIDE_ANGLE) * radial, Math.cos(GUIDE_ANGLE) * radial)
 }
 
 export function screenMount(): Mount {
   if (screenRoom === 'B1') {
-    return { x: 0.01 + 0.025, y: 1.32, z: 1.1, rotY: Math.PI / 2 }
+    const room = rectOf('B1')
+    return { x: room.minX + WALL_T * 0.16, y: 1.32, z: room.minZ + 1.1, rotY: Math.PI / 2 }
   }
-  const world = localToWorld(2.35, 0.15)
-  return { x: world.x, y: 1.32, z: world.z, rotY: Math.PI }
+  const radius = b2Radius()
+  const cut = screenChordAngle(radius)
+  const face = chordFace(radius, cut.center, screenChordWidth() / 2)
+  // The display sits on the chord. The bezel is 4 mm proud so it does not fight the wall.
+  const proud = 0.004
+  const faceR = Math.hypot(face.x, face.z)
+  const mountR = faceR - proud + SCREEN_D / 2
+  const scale = mountR / faceR
+  const world = localToWorld(face.x * scale, face.z * scale)
+  return { x: world.x, y: 1.32, z: world.z, rotY: face.rotY }
 }
 
 export function screenCamera(): { pos: [number, number, number]; target: [number, number, number] } {
@@ -231,7 +271,7 @@ export function startPose(): WalkPose {
 
 export function standingPose(): WalkPose {
   const c = b2Center()
-  return { x: c.x + 0, y: EYE_Y, z: c.z + exhibitStandingZ, yaw: 0, pitch: 0 }
+  return { x: c.x, y: EYE_Y, z: c.z + b2Radius() - STAND_INSET, yaw: 0, pitch: 0 }
 }
 
 export function shotPose(name: string | null): WalkPose | null {
@@ -239,6 +279,17 @@ export function shotPose(name: string | null): WalkPose | null {
   if (name === 'b3') {
     const c = b2Center()
     return { x: c.x, y: EYE_Y, z: c.z - 2, yaw: 0, pitch: 0 }
+  }
+  if (name === 'screen') {
+    const mount = screenMount()
+    const dist = 2.6
+    return {
+      x: mount.x + Math.sin(mount.rotY) * dist,
+      y: EYE_Y,
+      z: mount.z + Math.cos(mount.rotY) * dist,
+      yaw: -mount.rotY,
+      pitch: 0,
+    }
   }
   if (name === 'a1') {
     const room = rectOf('A1')
@@ -454,7 +505,7 @@ export function barrierSegs(): Seg[] {
 
   const radius = b2Radius()
   const center = b2Center()
-  for (const chord of chordAngles(radius)) {
+  for (const chord of wallChordAngles(radius)) {
     const a0 = chord.center - chord.half
     const a1 = chord.center + chord.half
     const ax = center.x + radius * Math.sin(a0)
