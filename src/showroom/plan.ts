@@ -21,7 +21,9 @@ export const NEAR_PLINTH = 2
 
 export const SCREEN_W = 1.68
 export const SCREEN_D = 0.05
-export const SCREEN_CHORD_W = 1.9
+// 1.68 m screen plus 0.21 m of wall on each side.
+export const SCREEN_SIDE = 0.21
+export const SCREEN_CHORD_W = SCREEN_W + SCREEN_SIDE * 2
 export const STAND_INSET = 1
 export const PLINTH_X = 1.34
 export const PLINTH_Z = -1.34
