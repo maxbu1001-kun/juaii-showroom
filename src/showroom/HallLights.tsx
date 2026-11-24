@@ -1,14 +1,17 @@
 import { useLayoutEffect, useRef } from 'react'
 import type { DirectionalLight, Object3D, PointLight, SpotLight } from 'three'
+import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js'
 import { b2Center, b2Radius, plinths, rectOf, wallHemisphere, type RoomId } from './plan'
+
+RectAreaLightUniformsLib.init()
 
 const RING = 12
 const WALL_POINT = 0
-// Visitor side is +z. J02 sits in front of the panel and a little to the outside, aimed at the board.
-// J03 is a short cone on the near rim. Both cones are kept off the plinth top.
+// Visitor side is +z. J02 is 28° above horizontal, far enough that the whole panel
+// sits in the full-intensity core, aimed at the panel's lower middle.
 const OBJECT_SPOT: Record<string, { intensity: number; x: number; y: number; z: number; distance: number; aimZ: number; aimY: number; angle: number; penumbra: number }> = {
-  'J03-01': { intensity: 0.1, x: 0, y: 0.22, z: 0.05, distance: 0.15, aimZ: 0, aimY: 0.105, angle: 0.7, penumbra: 0.25 },
-  'J02-01': { intensity: 0.52, x: 0.5, y: 0.62, z: 0.95, distance: 2.6, aimZ: 0, aimY: 0.22, angle: 0.12, penumbra: 0.2 },
+  'J03-01': { intensity: 0, x: 0, y: 0.22, z: 0.05, distance: 0.15, aimZ: 0, aimY: 0.105, angle: 0.7, penumbra: 0.25 },
+  'J02-01': { intensity: 3.5, x: 0, y: 0.95, z: 1.6, distance: 4, aimZ: 0.02, aimY: 0.2, angle: 0.16, penumbra: 0.05 },
 }
 
 export function HallLights({ room }: { room: RoomId }) {
@@ -108,6 +111,12 @@ export function HallLights({ room }: { room: RoomId }) {
             penumbra={OBJECT_SPOT[post.sku].penumbra}
             decay={2}
             distance={OBJECT_SPOT[post.sku].distance}
+            castShadow={post.sku === 'J02-01'}
+            shadow-mapSize-width={1024}
+            shadow-mapSize-height={1024}
+            shadow-bias={-0.0006}
+            shadow-camera-near={0.2}
+            shadow-camera-far={4.5}
             position={[post.x + OBJECT_SPOT[post.sku].x, OBJECT_SPOT[post.sku].y, post.z + OBJECT_SPOT[post.sku].z]}
           />
           <object3D
@@ -118,6 +127,19 @@ export function HallLights({ room }: { room: RoomId }) {
           />
         </group>
       ))}
+      {posts
+        .filter((post) => post.sku === 'J03-01')
+        .map((post) => (
+          <rectAreaLight
+            key="j03-rim"
+            color="#f3f2ef"
+            intensity={3}
+            width={0.18}
+            height={0.012}
+            position={[post.x, 0.095, post.z + 0.13]}
+            rotation={[0.55, 0, 0]}
+          />
+        ))}
     </>
   )
 }

@@ -7,12 +7,16 @@ import type { RefObject } from 'react'
 import {
   Box3,
   DoubleSide,
+  Color,
+  FrontSide,
   LinearToneMapping,
+  MeshBasicMaterial,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
+  PCFSoftShadowMap,
   Vector3,
 } from 'three'
-import type { DirectionalLight, Group, Mesh, Object3D, WebGLRenderer } from 'three'
+import type { DirectionalLight, Group, Material, Mesh, Object3D, WebGLRenderer } from 'three'
 import { PARTS } from '../copy'
 import type { Lang, Pair, PartId, Sku, Zone } from '../copy'
 import { Hall } from './Hall'
@@ -765,6 +769,12 @@ function Stand({
 
   return (
     <group
+      userData={{ measure: 'J02' }}
+      ref={(node) => {
+        node?.traverse((child) => {
+          if ((child as Mesh).isMesh) child.castShadow = true
+        })
+      }}
       onClick={(event) => {
         if (closeup) return
         event.stopPropagation()
@@ -804,6 +814,8 @@ function Stand({
         <group ref={pivot}>
           <mesh
             position={[0, -0.09, 0]}
+            castShadow
+            userData={{ measure: 'J02F' }}
             {...(closeup ? pickHandlers(() => onPickPart('j02-hinge')) : {})}
           >
             <boxGeometry args={[0.11, 0.18, 0.006]} />
@@ -1105,22 +1117,22 @@ function Room(props: ShowroomProps & { epoch: number }) {
     <group>
       {spots.map((spot) => (
         <group key={spot.sku}>
-          <mesh position={[spot.x, PLINTH_H / 2, spot.z]} material={plinth}>
+          <mesh position={[spot.x, PLINTH_H / 2, spot.z]} material={plinth} receiveShadow userData={{ measure: spot.sku === 'J03-01' ? 'P03' : 'P02' }}>
             <boxGeometry args={[PLINTH_S, PLINTH_H, PLINTH_S]} />
           </mesh>
           <ContactShadows
             position={[spot.x, PLINTH_H + 0.002, spot.z]}
-            scale={0.42}
-            opacity={0.85}
-            blur={1.4}
-            far={0.5}
+            scale={0.5}
+            opacity={1}
+            blur={0.35}
+            far={0.35}
             resolution={512}
-            color="#2f2d2b"
-            frames={8}
+            color="#0e0d0c"
+            frames={20}
           />
         </group>
       ))}
-      <group position={[j03.x, PLINTH_H, j03.z]}>
+      <group position={[j03.x, PLINTH_H, j03.z]} userData={{ measure: 'J03' }}>
         <Tray
           selected={props.sku === 'J03-01'}
           closeup={closeup && props.sku === 'J03-01'}
@@ -1177,9 +1189,59 @@ function Room(props: ShowroomProps & { epoch: number }) {
   )
 }
 
+function ObjectMask() {
+  const scene = useThree((state) => state.scene)
+  const applied = useRef(false)
+  useFrame(() => {
+    if (new URLSearchParams(window.location.search).get('mask') !== '1') return
+    scene.background = new Color('#000000')
+    if (applied.current) return
+    const keep = new Set<Object3D>()
+    scene.traverse((obj) => {
+      const id = obj.userData.measure as string | undefined
+      if (id === 'J02' || id === 'J03' || id === 'P02' || id === 'P03' || id === 'J02F') obj.traverse((child) => keep.add(child))
+    })
+    if (keep.size === 0) return
+    applied.current = true
+    const blank = () => new MeshBasicMaterial({ transparent: true, opacity: 0, toneMapped: false, depthWrite: false })
+    const flat = (color: string) => new MeshBasicMaterial({ color, toneMapped: false, side: FrontSide })
+    scene.traverse((obj) => {
+      const mesh = obj as Mesh
+      if (!mesh.isMesh) return
+      if (!keep.has(mesh)) {
+        mesh.visible = false
+        return
+      }
+      let id = ''
+      let cursor: Object3D | null = mesh
+      while (cursor) {
+        if (typeof cursor.userData.measure === 'string') {
+          id = cursor.userData.measure
+          break
+        }
+        cursor = cursor.parent
+      }
+      if (id === 'J02F') {
+        mesh.material = [blank(), blank(), blank(), blank(), flat('#ffd000'), blank()]
+        return
+      }
+      if (id === 'P02' || id === 'P03') {
+        const color = id === 'P02' ? '#2a4aff' : '#2ad4ff'
+        mesh.material = [blank(), blank(), flat(color), blank(), blank(), blank()]
+        return
+      }
+      mesh.material = flat(id === 'J03' ? '#2aff4a' : '#ff2a6a')
+      void (mesh.material as Material)
+    })
+  })
+  return null
+}
+
 function configureRenderer(gl: WebGLRenderer): void {
   gl.toneMapping = LinearToneMapping
   gl.toneMappingExposure = 1.46
+  gl.shadowMap.enabled = true
+  gl.shadowMap.type = PCFSoftShadowMap
 }
 
 export default function Showroom(props: ShowroomProps) {
@@ -1203,6 +1265,7 @@ export default function Showroom(props: ShowroomProps) {
       <color attach="background" args={['#e8e5e0']} />
       <HallLights room={props.lightRoom} />
       <Hall />
+      <ObjectMask />
       {props.mode === 'closeup' ? (
         <CameraRig cameraKey={cameraKey} onReady={props.onReady} controlsRef={controlsRef} />
       ) : null}
