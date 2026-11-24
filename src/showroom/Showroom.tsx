@@ -78,22 +78,23 @@ const ROOM = {
 }
 
 const PLINTH_H = 0.08
-const RIM_ENV_INTENSITY = 0.55
-const RIM_ENV_J03 = 2.4
+const RIM_ENV_INTENSITY = 0.4
+const RIM_ENV_J03 = 6
 
-function makeRimEnv(): CubeTexture {
-  const size = 64
-  const paint = (where: 'seamZ' | 'seamY' | 'none') => {
+function makeRimEnv(tint: [number, number, number]): CubeTexture {
+  const size = 128
+  const paint = (where: 'front' | 'top' | 'none') => {
     const canvas = document.createElement('canvas')
     canvas.width = size
     canvas.height = size
     const g = canvas.getContext('2d')
     if (!g) return canvas
     for (let y = 0; y < size; y++) {
-      const fall = where === 'seamY' ? 1 : 0
-      const r = Math.round(72 + (243 - 72) * fall)
-      const gv = Math.round(69 + (242 - 69) * fall)
-      const b = Math.round(64 + (239 - 64) * fall)
+      const center = where === 'front' ? 8 : size - 10
+      const fall = where === 'none' ? 0 : Math.exp(-((y - center) ** 2) / (2 * 6 ** 2))
+      const r = Math.round(68 + (tint[0] - 68) * fall)
+      const gv = Math.round(64 + (tint[1] - 64) * fall)
+      const b = Math.round(58 + (tint[2] - 58) * fall)
       g.fillStyle = `rgb(${r},${gv},${b})`
       g.fillRect(0, y, size, 1)
     }
@@ -101,17 +102,22 @@ function makeRimEnv(): CubeTexture {
     tex.colorSpace = SRGBColorSpace
     return tex.image as HTMLCanvasElement
   }
-  const cube = new CubeTexture([paint('none'), paint('none'), paint('seamY'), paint('none'), paint('none'), paint('none')])
+  const cube = new CubeTexture([paint('none'), paint('none'), paint('top'), paint('none'), paint('front'), paint('none')])
   cube.colorSpace = SRGBColorSpace
   cube.mapping = CubeReflectionMapping
   cube.needsUpdate = true
   return cube
 }
 
-let rimEnv: CubeTexture | null = null
-function rimEnvMap(): CubeTexture {
-  rimEnv ??= makeRimEnv()
-  return rimEnv
+let rimEnvJ02: CubeTexture | null = null
+let rimEnvJ03: CubeTexture | null = null
+function j02EnvMap(): CubeTexture {
+  rimEnvJ02 ??= makeRimEnv([206, 220, 232])
+  return rimEnvJ02
+}
+function j03EnvMap(): CubeTexture {
+  rimEnvJ03 ??= makeRimEnv([243, 242, 239])
+  return rimEnvJ03
 }
 
 function makeDecalMap(): DataTexture {
@@ -121,7 +127,7 @@ function makeDecalMap(): DataTexture {
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const r = Math.hypot(x - half, y - half) / half
-      const alpha = r < 0.78 ? 0.58 : r < 1 ? 0.58 * (1 - (r - 0.78) / 0.22) ** 2 : 0
+      const alpha = r < 0.8 ? 0.55 : r < 1 ? 0.55 * (1 - (r - 0.8) / 0.2) ** 2 : 0
       const i = (y * size + x) * 4
       data[i] = 12
       data[i + 1] = 11
@@ -636,10 +642,10 @@ function Tray({
         color: '#d5d9dd',
         metalness: 0.48,
         roughness: 0.34,
-        anisotropy: 0.85,
-        anisotropyRotation: Math.PI / 2,
+        anisotropy: 1,
+        anisotropyRotation: 0,
         side: DoubleSide,
-        envMap: rimEnvMap(),
+        envMap: j03EnvMap(),
         envMapIntensity: RIM_ENV_J03,
       }),
     [map],
@@ -825,7 +831,7 @@ function Stand({
     else tilt.current += (goal - tilt.current) * (1 - Math.exp(-3.4 * delta))
     if (pivot.current) pivot.current.rotation.x = tilt.current
   })
-  const reflect = { envMap: rimEnvMap(), envMapIntensity: RIM_ENV_INTENSITY }
+  const reflect = { envMap: j02EnvMap(), envMapIntensity: RIM_ENV_INTENSITY }
   const metal = { color: '#c8c2b8', metalness: 0.42, roughness: 0.34, ...reflect }
   const pole = { color: '#b7b1a6', metalness: 0.46, roughness: 0.3, ...reflect }
   const clampEmissive = clampNotes ? '#5e5a55' : '#000000'

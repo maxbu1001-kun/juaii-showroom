@@ -7,7 +7,7 @@ const WALL_POINT = 0
 // Straight down onto the plinth. The cone and the cutoff both die on the top,
 // so nothing reaches the floor or the wall.
 // A short beam on the upper panel. It dies on the board, so the floor and walls stay dark.
-const PLINTH_SPOT = { intensity: 0.1, y: 0.42, z: 0.26, distance: 0.34, aimY: 0.3, aimZ: 0.02, angle: 0.13, penumbra: 0.85 }
+const PLINTH_SPOT = { intensity: 0, y: 0.42, z: 0.26, distance: 0.34, aimY: 0.3, aimZ: 0.02, angle: 0.13, penumbra: 0.85 }
 
 export function HallLights({ room }: { room: RoomId }) {
   const dirs = useRef<(DirectionalLight | null)[]>([])
