@@ -1,4 +1,4 @@
-import { CameraControls, ContactShadows } from '@react-three/drei'
+import { CameraControls } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import CameraControlsImpl from 'camera-controls'
@@ -6,14 +6,19 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import {
   Box3,
-  DoubleSide,
+  CanvasTexture,
   Color,
+  CubeReflectionMapping,
+  CubeTexture,
+  DataTexture,
+  DoubleSide,
   FrontSide,
   LinearToneMapping,
   MeshBasicMaterial,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
   PCFSoftShadowMap,
+  SRGBColorSpace,
   Vector3,
 } from 'three'
 import type { DirectionalLight, Group, Material, Mesh, Object3D, WebGLRenderer } from 'three'
@@ -73,6 +78,76 @@ const ROOM = {
 }
 
 const PLINTH_H = 0.08
+const RIM_ENV_INTENSITY = 1.46
+const RIM_ENV_J03 = 1.9
+
+function makeRimEnv(): CubeTexture {
+  const size = 64
+  const face = (kind: 'band' | 'grey' | 'top') => {
+    const canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    const g = canvas.getContext('2d')
+    if (!g) return canvas
+    g.fillStyle = '#4a4a4a'
+    g.fillRect(0, 0, size, size)
+    if (kind === 'band') {
+      for (let y = 0; y < size; y++) {
+        const band = Math.exp(-((y - 24) ** 2) / (2 * 16 ** 2))
+        const v = Math.round(74 + 150 * band)
+        g.fillStyle = `rgb(${v},${v},${v})`
+        g.fillRect(0, y, size, 1)
+      }
+    }
+    if (kind === 'top') {
+      const mid = (size - 1) / 2
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const d = Math.hypot(x - mid, y - mid) / mid
+          const band = Math.exp(-(d * d) / (2 * 0.7 * 0.7))
+          const v = Math.round(90 + 130 * band)
+          g.fillStyle = `rgb(${v},${v},${v})`
+          g.fillRect(x, y, 1, 1)
+        }
+      }
+    }
+    const tex = new CanvasTexture(canvas)
+    tex.colorSpace = SRGBColorSpace
+    return tex.image as HTMLCanvasElement
+  }
+  const cube = new CubeTexture([face('band'), face('band'), face('top'), face('grey'), face('band'), face('grey')])
+  cube.colorSpace = SRGBColorSpace
+  cube.mapping = CubeReflectionMapping
+  cube.needsUpdate = true
+  return cube
+}
+
+let rimEnv: CubeTexture | null = null
+function rimEnvMap(): CubeTexture {
+  rimEnv ??= makeRimEnv()
+  return rimEnv
+}
+
+function makeDecalMap(): DataTexture {
+  const size = 128
+  const data = new Uint8Array(size * size * 4)
+  const half = (size - 1) / 2
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const r = Math.hypot(x - half, y - half) / half
+      const alpha = r < 0.62 ? 0.42 : r < 1 ? 0.42 * (1 - (r - 0.62) / 0.38) : 0
+      const i = (y * size + x) * 4
+      data[i] = 12
+      data[i + 1] = 11
+      data[i + 2] = 10
+      data[i + 3] = Math.round(Math.max(0, Math.min(1, alpha)) * 255)
+    }
+  }
+  const tex = new DataTexture(data, size, size)
+  tex.colorSpace = SRGBColorSpace
+  tex.needsUpdate = true
+  return tex
+}
 const PLINTH_S = 0.46
 const POST_H = 0.62
 const SCREEN_H = (SCREEN_W * 9) / 16
@@ -578,6 +653,8 @@ function Tray({
         anisotropy: 0.85,
         anisotropyRotation: Math.PI / 2,
         side: DoubleSide,
+        envMap: rimEnvMap(),
+        envMapIntensity: RIM_ENV_J03,
       }),
     [map],
   )
@@ -762,8 +839,9 @@ function Stand({
     else tilt.current += (goal - tilt.current) * (1 - Math.exp(-3.4 * delta))
     if (pivot.current) pivot.current.rotation.x = tilt.current
   })
-  const metal = { color: '#c8c2b8', metalness: 0.42, roughness: 0.34 }
-  const pole = { color: '#b7b1a6', metalness: 0.46, roughness: 0.3 }
+  const reflect = { envMap: rimEnvMap(), envMapIntensity: RIM_ENV_INTENSITY }
+  const metal = { color: '#c8c2b8', metalness: 0.42, roughness: 0.34, ...reflect }
+  const pole = { color: '#b7b1a6', metalness: 0.46, roughness: 0.3, ...reflect }
   const clampEmissive = clampNotes ? '#5e5a55' : '#000000'
   const clampIntensity = clampNotes ? 0.28 : 0
 
@@ -799,7 +877,7 @@ function Stand({
           </mesh>
           <mesh position={[x, 0.16, 0]} rotation={[Math.PI / 2, 0, 0]}>
             <torusGeometry args={[0.012, 0.0026, 8, 18]} />
-            <meshStandardMaterial color="#9a948c" metalness={0.4} roughness={0.34} />
+            <meshStandardMaterial color="#9a948c" metalness={0.4} roughness={0.34} {...reflect} />
           </mesh>
         </group>
       ))}
@@ -809,7 +887,7 @@ function Stand({
           {...(closeup ? pickHandlers(() => onPickPart('j02-hinge')) : {})}
         >
           <cylinderGeometry args={[0.012, 0.012, 0.22, 16]} />
-          <meshStandardMaterial color="#8f8a83" metalness={0.48} roughness={0.28} />
+          <meshStandardMaterial color="#8f8a83" metalness={0.48} roughness={0.28} {...reflect} />
         </mesh>
         <group ref={pivot}>
           <mesh
@@ -819,7 +897,7 @@ function Stand({
             {...(closeup ? pickHandlers(() => onPickPart('j02-hinge')) : {})}
           >
             <boxGeometry args={[0.11, 0.18, 0.006]} />
-            <meshStandardMaterial color="#d2ccc3" metalness={0.36} roughness={0.36} />
+            <meshStandardMaterial color="#d2ccc3" metalness={0.36} roughness={0.36} {...reflect} />
           </mesh>
           <group position={[0, -0.172, 0.01]}>
             <mesh {...(closeup ? pickHandlers(() => onPickPart('j02-clamp')) : {})}>
@@ -828,6 +906,7 @@ function Stand({
                 color="#6e6a62"
                 metalness={0.4}
                 roughness={0.34}
+                {...reflect}
                 emissive={clampEmissive}
                 emissiveIntensity={clampIntensity}
               />
@@ -841,6 +920,7 @@ function Stand({
                 color="#5e5a55"
                 metalness={0.38}
                 roughness={0.34}
+                {...reflect}
                 emissive={clampEmissive}
                 emissiveIntensity={clampIntensity}
               />
@@ -855,6 +935,7 @@ function Stand({
                 color="#4e4a45"
                 metalness={0.38}
                 roughness={0.34}
+                {...reflect}
                 emissive={clampEmissive}
                 emissiveIntensity={clampIntensity}
               />
@@ -1101,6 +1182,22 @@ export function RoomLights() {
   )
 }
 
+function BaseDecal({ x, z }: { x: number; z: number }) {
+  const map = useMemo(() => makeDecalMap(), [])
+  useEffect(() => () => map.dispose(), [map])
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[x, PLINTH_H + 0.004, z]} renderOrder={2}>
+      <planeGeometry args={[0.32, 0.32]} />
+      <meshBasicMaterial
+        map={map}
+        transparent
+        depthWrite={false}
+        toneMapped={false}
+      />
+    </mesh>
+  )
+}
+
 function Room(props: ShowroomProps & { epoch: number }) {
   const closeup = props.zone === 'closeup'
   const plinth = useMemo(
@@ -1120,16 +1217,7 @@ function Room(props: ShowroomProps & { epoch: number }) {
           <mesh position={[spot.x, PLINTH_H / 2, spot.z]} material={plinth} receiveShadow userData={{ measure: spot.sku === 'J03-01' ? 'P03' : 'P02' }}>
             <boxGeometry args={[PLINTH_S, PLINTH_H, PLINTH_S]} />
           </mesh>
-          <ContactShadows
-            position={[spot.x, PLINTH_H + 0.002, spot.z]}
-            scale={0.5}
-            opacity={1}
-            blur={0.35}
-            far={0.35}
-            resolution={512}
-            color="#0e0d0c"
-            frames={20}
-          />
+          <BaseDecal x={spot.x} z={spot.z} />
         </group>
       ))}
       <group position={[j03.x, PLINTH_H, j03.z]} userData={{ measure: 'J03' }}>
