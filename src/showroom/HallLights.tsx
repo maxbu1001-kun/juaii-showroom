@@ -4,10 +4,11 @@ import { b2Center, b2Radius, plinths, rectOf, wallHemisphere, type RoomId } from
 
 const RING = 12
 const WALL_POINT = 0
-// Narrow cone. It dies before the floor around the plinth and never reaches the arc.
-const OBJECT_SPOT: Record<string, { intensity: number; y: number; z: number; distance: number; aimZ?: number; aimY?: number }> = {
-  'J03-01': { intensity: 0.95, y: 0.4, z: 0.16, distance: 0.38 },
-  'J02-01': { intensity: 0.56, y: 0.6, z: 0.06, distance: 0.72, aimZ: 0.02 },
+// Visitor side is +z. J02 sits in front of the panel and a little to the outside, aimed at the board.
+// J03 is a short cone on the near rim. Both cones are kept off the plinth top.
+const OBJECT_SPOT: Record<string, { intensity: number; x: number; y: number; z: number; distance: number; aimZ: number; aimY: number; angle: number; penumbra: number }> = {
+  'J03-01': { intensity: 0.1, x: 0, y: 0.22, z: 0.05, distance: 0.15, aimZ: 0, aimY: 0.105, angle: 0.7, penumbra: 0.25 },
+  'J02-01': { intensity: 0.52, x: 0.5, y: 0.62, z: 0.95, distance: 2.6, aimZ: 0, aimY: 0.22, angle: 0.12, penumbra: 0.2 },
 }
 
 export function HallLights({ room }: { room: RoomId }) {
@@ -103,11 +104,11 @@ export function HallLights({ room }: { room: RoomId }) {
             }}
             color="#f3f2ef"
             intensity={OBJECT_SPOT[post.sku].intensity}
-            angle={0.42}
-            penumbra={0.45}
+            angle={OBJECT_SPOT[post.sku].angle}
+            penumbra={OBJECT_SPOT[post.sku].penumbra}
             decay={2}
             distance={OBJECT_SPOT[post.sku].distance}
-            position={[post.x, OBJECT_SPOT[post.sku].y, post.z + OBJECT_SPOT[post.sku].z]}
+            position={[post.x + OBJECT_SPOT[post.sku].x, OBJECT_SPOT[post.sku].y, post.z + OBJECT_SPOT[post.sku].z]}
           />
           <object3D
             ref={(node) => {

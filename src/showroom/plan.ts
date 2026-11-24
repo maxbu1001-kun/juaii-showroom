@@ -30,8 +30,9 @@ export const PLINTH_Z = -1.34
 export const GUIDE_ALONG = 2
 
 // White hemisphere that lights every room the same. Lower it to darken the
-// walls without changing #f3f1ec or the exposure. Tuned so the object peak is
-// at least 1.3× an adjacent B2 wall.
+// walls without changing #f3f1ec or the exposure. Tuned so the J02 lit-face
+// mean — object body only, thin top-bar highlight excluded — is at least
+// 1.3× the lit-wall mean.
 export const wallHemisphere = 1.76
 
 export type RoomId = 'A1' | 'B1' | 'C1' | 'A2' | 'B2' | 'C2' | 'A3' | 'B3' | 'C3'
