@@ -86,7 +86,7 @@ function Minimap({
   const w = bounds.maxX - bounds.minX
   const d = bounds.maxZ - bounds.minZ
   const pad = 0.6
-  const vb = `${bounds.minX - pad} ${-(bounds.maxZ + pad)} ${w + pad * 2} ${d + pad * 2}`
+  const vb = `${bounds.minX - pad} ${bounds.minZ - pad} ${w + pad * 2} ${d + pad * 2}`
   const posts = plinths()
   const title =
     room === 'B2'
@@ -104,18 +104,18 @@ function Minimap({
           <rect
             key={id}
             x={rect.minX}
-            y={-rect.maxZ}
+            y={rect.minZ}
             width={rect.maxX - rect.minX}
             height={rect.maxZ - rect.minZ}
             className={here ? 'mini-here' : seen ? 'mini-seen' : 'mini-new'}
           />
         )
       })}
-      <circle cx={b2Center().x} cy={-b2Center().z} r={b2Radius()} className={room === 'B2' ? 'mini-here' : visited.includes('B2') ? 'mini-seen' : 'mini-new'} />
+      <circle cx={b2Center().x} cy={b2Center().z} r={b2Radius()} className={room === 'B2' ? 'mini-here' : visited.includes('B2') ? 'mini-seen' : 'mini-new'} />
       {posts.map((post) => (
-        <circle key={post.sku} cx={post.x} cy={-post.z} r={0.18} className="mini-mark" />
+        <circle key={post.sku} cx={post.x} cy={post.z} r={0.18} className="mini-mark" />
       ))}
-      <g transform={`translate(${roomPoint(room).x} ${-roomPoint(room).z}) rotate(${(heading * 180) / Math.PI})`}>
+      <g transform={`translate(${roomPoint(room).x} ${roomPoint(room).z}) rotate(${(heading * 180) / Math.PI})`}>
         <polygon points="0,-0.55 0.32,0.4 -0.32,0.4" className="mini-arrow" />
       </g>
     </svg>

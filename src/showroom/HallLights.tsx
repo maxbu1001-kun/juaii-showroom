@@ -5,9 +5,9 @@ import { b2Center, b2Radius, plinths, rectOf, wallHemisphere, type RoomId } from
 const RING = 12
 const WALL_POINT = 0
 // Narrow cone. It dies before the floor around the plinth and never reaches the arc.
-const OBJECT_SPOT = {
-  'J03-01': { intensity: 0.78, y: 0.4, z: 0.16, distance: 0.38 },
-  'J02-01': { intensity: 0.55, y: 0.62, z: 0.04, distance: 0.72 },
+const OBJECT_SPOT: Record<string, { intensity: number; y: number; z: number; distance: number; aimZ?: number; aimY?: number }> = {
+  'J03-01': { intensity: 0.95, y: 0.4, z: 0.16, distance: 0.38 },
+  'J02-01': { intensity: 0.56, y: 0.6, z: 0.06, distance: 0.72, aimZ: 0.02 },
 }
 
 export function HallLights({ room }: { room: RoomId }) {
@@ -113,7 +113,7 @@ export function HallLights({ room }: { room: RoomId }) {
             ref={(node) => {
               objectTargets.current[index] = node
             }}
-            position={[post.x, 0.14, post.z]}
+            position={[post.x, OBJECT_SPOT[post.sku].aimY ?? 0.16, post.z + (OBJECT_SPOT[post.sku].aimZ ?? 0)]}
           />
         </group>
       ))}
