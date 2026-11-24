@@ -78,44 +78,30 @@ const ROOM = {
 }
 
 const PLINTH_H = 0.08
-const RIM_ENV_INTENSITY = 1.46
-const RIM_ENV_J03 = 1.9
+const RIM_ENV_INTENSITY = 0.55
+const RIM_ENV_J03 = 2.4
 
 function makeRimEnv(): CubeTexture {
   const size = 64
-  const face = (kind: 'band' | 'grey' | 'top') => {
+  const paint = (where: 'seamZ' | 'seamY' | 'none') => {
     const canvas = document.createElement('canvas')
     canvas.width = size
     canvas.height = size
     const g = canvas.getContext('2d')
     if (!g) return canvas
-    g.fillStyle = '#4a4a4a'
-    g.fillRect(0, 0, size, size)
-    if (kind === 'band') {
-      for (let y = 0; y < size; y++) {
-        const band = Math.exp(-((y - 24) ** 2) / (2 * 16 ** 2))
-        const v = Math.round(74 + 150 * band)
-        g.fillStyle = `rgb(${v},${v},${v})`
-        g.fillRect(0, y, size, 1)
-      }
-    }
-    if (kind === 'top') {
-      const mid = (size - 1) / 2
-      for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-          const d = Math.hypot(x - mid, y - mid) / mid
-          const band = Math.exp(-(d * d) / (2 * 0.7 * 0.7))
-          const v = Math.round(90 + 130 * band)
-          g.fillStyle = `rgb(${v},${v},${v})`
-          g.fillRect(x, y, 1, 1)
-        }
-      }
+    for (let y = 0; y < size; y++) {
+      const fall = where === 'seamY' ? 1 : 0
+      const r = Math.round(72 + (243 - 72) * fall)
+      const gv = Math.round(69 + (242 - 69) * fall)
+      const b = Math.round(64 + (239 - 64) * fall)
+      g.fillStyle = `rgb(${r},${gv},${b})`
+      g.fillRect(0, y, size, 1)
     }
     const tex = new CanvasTexture(canvas)
     tex.colorSpace = SRGBColorSpace
     return tex.image as HTMLCanvasElement
   }
-  const cube = new CubeTexture([face('band'), face('band'), face('top'), face('grey'), face('band'), face('grey')])
+  const cube = new CubeTexture([paint('none'), paint('none'), paint('seamY'), paint('none'), paint('none'), paint('none')])
   cube.colorSpace = SRGBColorSpace
   cube.mapping = CubeReflectionMapping
   cube.needsUpdate = true
@@ -135,7 +121,7 @@ function makeDecalMap(): DataTexture {
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const r = Math.hypot(x - half, y - half) / half
-      const alpha = r < 0.62 ? 0.42 : r < 1 ? 0.42 * (1 - (r - 0.62) / 0.38) : 0
+      const alpha = r < 0.78 ? 0.58 : r < 1 ? 0.58 * (1 - (r - 0.78) / 0.22) ** 2 : 0
       const i = (y * size + x) * 4
       data[i] = 12
       data[i + 1] = 11
@@ -1182,18 +1168,13 @@ export function RoomLights() {
   )
 }
 
-function BaseDecal({ x, z }: { x: number; z: number }) {
+function BaseDecal({ x, z, w, d }: { x: number; z: number; w: number; d: number }) {
   const map = useMemo(() => makeDecalMap(), [])
   useEffect(() => () => map.dispose(), [map])
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[x, PLINTH_H + 0.004, z]} renderOrder={2}>
-      <planeGeometry args={[0.32, 0.32]} />
-      <meshBasicMaterial
-        map={map}
-        transparent
-        depthWrite={false}
-        toneMapped={false}
-      />
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[x, PLINTH_H + 0.01, z]} renderOrder={2}>
+      <planeGeometry args={[w, d]} />
+      <meshBasicMaterial map={map} transparent depthWrite={false} toneMapped={false} polygonOffset polygonOffsetFactor={-4} />
     </mesh>
   )
 }
@@ -1217,7 +1198,7 @@ function Room(props: ShowroomProps & { epoch: number }) {
           <mesh position={[spot.x, PLINTH_H / 2, spot.z]} material={plinth} receiveShadow userData={{ measure: spot.sku === 'J03-01' ? 'P03' : 'P02' }}>
             <boxGeometry args={[PLINTH_S, PLINTH_H, PLINTH_S]} />
           </mesh>
-          <BaseDecal x={spot.x} z={spot.z} />
+          <BaseDecal x={spot.x} z={spot.z} w={spot.sku === 'J03-01' ? 0.19 : 0.3} d={spot.sku === 'J03-01' ? 0.19 : 0.24} />
         </group>
       ))}
       <group position={[j03.x, PLINTH_H, j03.z]} userData={{ measure: 'J03' }}>

@@ -6,7 +6,8 @@ const RING = 12
 const WALL_POINT = 0
 // Straight down onto the plinth. The cone and the cutoff both die on the top,
 // so nothing reaches the floor or the wall.
-const PLINTH_SPOT = { intensity: 0.045, y: 0.55, distance: 0.5, aimY: 0.08, angle: 0.14, penumbra: 0.5 }
+// A short beam on the upper panel. It dies on the board, so the floor and walls stay dark.
+const PLINTH_SPOT = { intensity: 0.1, y: 0.42, z: 0.26, distance: 0.34, aimY: 0.3, aimZ: 0.02, angle: 0.13, penumbra: 0.85 }
 
 export function HallLights({ room }: { room: RoomId }) {
   const dirs = useRef<(DirectionalLight | null)[]>([])
@@ -111,13 +112,13 @@ export function HallLights({ room }: { room: RoomId }) {
             shadow-bias={-0.001}
             shadow-camera-near={0.05}
             shadow-camera-far={0.7}
-            position={[post.x, PLINTH_SPOT.y, post.z]}
+            position={[post.x, PLINTH_SPOT.y, post.z + PLINTH_SPOT.z]}
           />
           <object3D
             ref={(node) => {
               objectTargets.current[index] = node
             }}
-            position={[post.x, PLINTH_SPOT.aimY, post.z]}
+            position={[post.x, PLINTH_SPOT.aimY, post.z + PLINTH_SPOT.aimZ]}
           />
         </group>
       ))}
