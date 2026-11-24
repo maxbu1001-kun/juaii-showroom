@@ -1,11 +1,14 @@
 import { useLayoutEffect, useRef } from 'react'
 import type { DirectionalLight, Object3D, PointLight, SpotLight } from 'three'
-import { b2Center, b2Radius, plinths, rectOf, type RoomId } from './plan'
+import { b2Center, b2Radius, plinths, rectOf, wallHemisphere, type RoomId } from './plan'
 
 const RING = 12
 const WALL_POINT = 0
 // Narrow cone. It dies before the floor around the plinth and never reaches the arc.
-const OBJECT_SPOT = 28
+const OBJECT_SPOT = {
+  'J03-01': { intensity: 0.78, y: 0.4, z: 0.16, distance: 0.38 },
+  'J02-01': { intensity: 0.55, y: 0.62, z: 0.04, distance: 0.72 },
+}
 
 export function HallLights({ room }: { room: RoomId }) {
   const dirs = useRef<(DirectionalLight | null)[]>([])
@@ -36,7 +39,7 @@ export function HallLights({ room }: { room: RoomId }) {
     <>
       {/* Equal white sky and ground. The wash is not occluded, so a wall seen
           through a doorway stays the same color as the wall in the current room. */}
-      <hemisphereLight args={['#ffffff', '#ffffff', 2.2]} />
+      <hemisphereLight args={['#ffffff', '#ffffff', wallHemisphere]} />
       <ambientLight color="#ffffff" intensity={0} />
       {Array.from({ length: 4 }, (_, index) => {
         const placed = directionalPose(room, index)
@@ -99,12 +102,12 @@ export function HallLights({ room }: { room: RoomId }) {
               objects.current[index] = node
             }}
             color="#f3f2ef"
-            intensity={OBJECT_SPOT}
+            intensity={OBJECT_SPOT[post.sku].intensity}
             angle={0.42}
             penumbra={0.45}
             decay={2}
-            distance={0.38}
-            position={[post.x, 0.4, post.z + 0.16]}
+            distance={OBJECT_SPOT[post.sku].distance}
+            position={[post.x, OBJECT_SPOT[post.sku].y, post.z + OBJECT_SPOT[post.sku].z]}
           />
           <object3D
             ref={(node) => {

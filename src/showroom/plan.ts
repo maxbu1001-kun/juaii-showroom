@@ -29,6 +29,11 @@ export const PLINTH_X = 1.34
 export const PLINTH_Z = -1.34
 export const GUIDE_ALONG = 2
 
+// White hemisphere that lights every room the same. Lower it to darken the
+// walls without changing #f3f1ec or the exposure. Tuned so the object lit-face
+// average is at least 1.3× an adjacent B2 wall.
+export const wallHemisphere = 1.76
+
 export type RoomId = 'A1' | 'B1' | 'C1' | 'A2' | 'B2' | 'C2' | 'A3' | 'B3' | 'C3'
 
 export type WalkPose = { x: number; y: number; z: number; yaw: number; pitch: number }
@@ -273,7 +278,7 @@ export function startPose(): WalkPose {
 
 export function standingPose(): WalkPose {
   const c = b2Center()
-  return { x: c.x, y: EYE_Y, z: c.z + b2Radius() - STAND_INSET, yaw: 0, pitch: 0 }
+  return { x: c.x, y: EYE_Y, z: c.z + b2Radius() - STAND_INSET, yaw: 0, pitch: (-9 * Math.PI) / 180 }
 }
 
 export function shotPose(name: string | null): WalkPose | null {
@@ -292,6 +297,10 @@ export function shotPose(name: string | null): WalkPose | null {
       yaw: -mount.rotY,
       pitch: 0,
     }
+  }
+  if (name === 'objects') {
+    const c = b2Center()
+    return { x: c.x, y: 1.15, z: c.z + 1.16, yaw: 0, pitch: -0.42 }
   }
   if (name === 'a1') {
     const room = rectOf('A1')

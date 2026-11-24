@@ -1,4 +1,4 @@
-import { CameraControls } from '@react-three/drei'
+import { CameraControls, ContactShadows } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import CameraControlsImpl from 'camera-controls'
@@ -1104,9 +1104,21 @@ function Room(props: ShowroomProps & { epoch: number }) {
   return (
     <group>
       {spots.map((spot) => (
-        <mesh key={spot.sku} position={[spot.x, PLINTH_H / 2, spot.z]} material={plinth}>
-          <boxGeometry args={[PLINTH_S, PLINTH_H, PLINTH_S]} />
-        </mesh>
+        <group key={spot.sku}>
+          <mesh position={[spot.x, PLINTH_H / 2, spot.z]} material={plinth}>
+            <boxGeometry args={[PLINTH_S, PLINTH_H, PLINTH_S]} />
+          </mesh>
+          <ContactShadows
+            position={[spot.x, PLINTH_H + 0.002, spot.z]}
+            scale={0.42}
+            opacity={0.85}
+            blur={1.4}
+            far={0.5}
+            resolution={512}
+            color="#2f2d2b"
+            frames={8}
+          />
+        </group>
       ))}
       <group position={[j03.x, PLINTH_H, j03.z]}>
         <Tray
